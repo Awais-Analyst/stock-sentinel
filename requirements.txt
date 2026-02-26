@@ -1,37 +1,20 @@
-# Stock Sentinel — Dependencies
-# Python 3.11 recommended (see runtime.txt)
-
-# Data
-yfinance==0.2.54
-pandas==2.2.3
-numpy==1.26.4
-
-# News & Web Scraping
-newsapi-python==0.2.7
-requests==2.32.3
-beautifulsoup4==4.12.3
-lxml==5.3.0
-
-# NLP / Sentiment
-nltk==3.9.1
-vaderSentiment==3.3.2
-wordcloud==1.9.4
-
-# ML / Forecasting
-tensorflow==2.17.0
-prophet==1.1.6
-scikit-learn==1.5.2
-joblib==1.4.2
-
-# Optimization
-PuLP==2.9.0
-
-# Visualization / UI
-plotly==5.24.1
-streamlit==1.40.2
-matplotlib==3.9.2
-Pillow==10.4.0
-
-# Utilities
-python-dateutil==2.9.0
-pytz==2024.2
+yfinance
+pandas
+numpy
+newsapi-python
+requests
+beautifulsoup4
+lxml
+nltk
+vaderSentiment
+wordcloud
+scikit-learn
+plotly
+streamlit
+matplotlib
+Pillow
+PuLP
+prophet
+joblib
+python-dateutil
+pytz
