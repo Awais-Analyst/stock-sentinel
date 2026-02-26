@@ -195,6 +195,10 @@ df = add_lag_features(df)
 df = detect_anomalies(df)
 df.dropna(inplace=True)
 
+# ─── Safe defaults so chat box never crashes with NameError ──────────────────
+metrics = {}
+horizon = 30
+lstm_preds = None
 
 # ─────────────────────────────────────────────
 # TABS
@@ -308,7 +312,7 @@ with tab2:
                 from sentiment import generate_wordcloud
                 wc_img = generate_wordcloud(all_texts)
                 if wc_img is not None:
-                    st.image(wc_img, use_column_width=True,
+                    st.image(wc_img, use_container_width=True,
                              caption="Most frequent words in news/social posts")
                 else:
                     st.info("Word cloud unavailable — install: pip install wordcloud")
