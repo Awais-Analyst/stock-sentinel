@@ -57,12 +57,22 @@ def get_stock_data(symbol: str, start: str, end: str,
                    force_refresh: bool = False) -> pd.DataFrame:
     """
     Fetch OHLCV data from yfinance with exponential-backoff retry.
-    Returns cached data if available and force_refresh=False.
+    Cached data is ALWAYS filtered by the requested date range so that
+    changing the date in the sidebar actually updates the chart.
     """
+    start_ts = pd.Timestamp(start)
+    end_ts   = pd.Timestamp(end)
+
     if not force_refresh:
         cached = load_cached(symbol, "ohlcv")
         if cached is not None:
-            return cached
+            filtered = cached[
+                (cached.index >= start_ts) & (cached.index <= end_ts)
+            ]
+            if not filtered.empty:
+                log.info(f"Cache hit for {symbol} [{start} to {end}]: {len(filtered)} rows")
+                return filtered
+            log.info(f"Cache miss for {symbol} in [{start} to {end}] — re-fetching from yfinance")
 
     for attempt in range(1, 4):
         try:
@@ -89,7 +99,10 @@ def get_stock_data(symbol: str, start: str, end: str,
             time.sleep(wait)
 
     log.error(f"All yfinance attempts failed for {symbol}. Falling back to cache.")
-    return load_cached(symbol, "ohlcv") or pd.DataFrame()
+    cached = load_cached(symbol, "ohlcv")
+    if cached is not None:
+        return cached[(cached.index >= start_ts) & (cached.index <= end_ts)]
+    return pd.DataFrame()
 
 
 # ─────────────────────────────────────────────
