@@ -45,7 +45,7 @@ def _try_import(*modules):
         except ImportError:
             st.warning(f"Optional library '{mod}' not installed — some features disabled.")
 
-_try_import("wordcloud", "prophet", "tensorflow", "pulp")
+_try_import("wordcloud", "prophet", "pulp")
 
 from utils import (
     NEWS_API_KEY, NEWSDATA_API_KEY, NEWS_SOURCE, STOCKS,
@@ -109,9 +109,10 @@ st.title(f"📊 {symbol} — Stock Sentinel")
 # CACHED DATA LOADERS
 # ─────────────────────────────────────────────
 
-@st.cache_data(show_spinner="Fetching price & news data…", ttl=3600)
+@st.cache_data(show_spinner="Fetching price & news data…")
 def load_data(sym, start, end, na_key, nd_key, news_src, _force):
-    """Cache-busted by `_force` token (changes on every Refresh click)."""
+    """Cache-busted by `_force` token AND by any change to sym/start/end.
+    No ttl so parameters always trigger a fresh call when changed."""
     from data_pipeline import build_dataset
     from sentiment import add_sentiment_to_df, clean_text, score_sentiment
 
@@ -163,14 +164,24 @@ def load_lstm(df_hash, df_json):
 
 
 # ─────────────────────────────────────────────
-# LOAD DATA
+# LOAD DATA — auto-refresh when symbol or dates change
 # ─────────────────────────────────────────────
 force_token = int(st.session_state.get("refresh_count", 0))
-if refresh:
-    st.session_state["refresh_count"] = force_token + 1
-    force_token += 1
 
-with st.spinner("Loading data…"):
+# Detect symbol/date changes and auto-increment the force token
+_prev_key = st.session_state.get("_last_query_key", "")
+_curr_key = f"{symbol}|{start_date}|{end_date}"
+if _prev_key != _curr_key:
+    force_token += 1
+    st.session_state["refresh_count"] = force_token
+    st.session_state["_last_query_key"] = _curr_key
+
+if refresh:
+    force_token += 1
+    st.session_state["refresh_count"] = force_token
+    st.session_state["_last_query_key"] = _curr_key
+
+with st.spinner("Loading data..."):
     try:
         df, cleaned_by_date, all_texts = load_data(
             symbol, start_date, end_date,
@@ -256,10 +267,11 @@ with tab1:
             try:
                 lstm_preds, train_m, test_m = load_lstm(df_hash, df_json)
                 if lstm_preds is not None:
-                    st.success(
-                        f"LSTM trained — Test RMSE: {test_m.get('rmse', 'N/A'):.4f} | "
-                        f"R²: {test_m.get('r2', 'N/A'):.4f}"
-                    )
+                    rmse = test_m.get('rmse', None)
+                    r2   = test_m.get('r2', None)
+                    rmse_str = f"{rmse:.4f}" if isinstance(rmse, float) else "N/A"
+                    r2_str   = f"{r2:.4f}"   if isinstance(r2, float)   else "N/A"
+                    st.success(f"LSTM trained — Test RMSE: {rmse_str} | R²: {r2_str}")
             except Exception as e:
                 st.warning(f"LSTM training failed: {e}")
 
@@ -339,8 +351,9 @@ with tab2:
             title="Pearson Correlation Matrix",
         )
         fig_corr.update_layout(
-            paper_bgcolor="#0e1117", plot_bgcolor="#161b22",
-            font=dict(color="#c9d1d9"),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#444444"),
         )
         st.plotly_chart(fig_corr, use_container_width=True)
 
@@ -421,7 +434,10 @@ with tab3:
                     fig_pie = px.pie(wt_df, names="Stock", values="Weight",
                                      title="Optimized Portfolio Weights",
                                      color_discrete_sequence=px.colors.qualitative.Safe)
-                    fig_pie.update_layout(paper_bgcolor="#0e1117", font=dict(color="#c9d1d9"))
+                    fig_pie.update_layout(
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        font=dict(color="#444444"),
+                    )
                     st.plotly_chart(fig_pie, use_container_width=True)
                     st.dataframe(wt_df, use_container_width=True, hide_index=True)
                 else:
