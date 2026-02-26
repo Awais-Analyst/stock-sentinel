@@ -10,7 +10,8 @@ vaderSentiment
 wordcloud
 scikit-learn
 plotly
-streamlit
+streamlit>=1.35.0
+altair>=5.0,<6
 matplotlib
 Pillow
 PuLP
