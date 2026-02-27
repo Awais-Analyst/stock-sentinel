@@ -1,3 +1,7 @@
+# Stock Sentinel — Dependencies
+# Python 3.13 compatible (Streamlit Community Cloud)
+# tensorflow removed — LSTM is optional
+
 yfinance
 pandas
 numpy
@@ -19,3 +23,5 @@ prophet
 joblib
 python-dateutil
 pytz
+shap
+deep-translator
