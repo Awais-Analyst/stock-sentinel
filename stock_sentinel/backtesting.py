@@ -176,15 +176,17 @@ def calc_all_metrics(portfolio_df: pd.DataFrame,
 def optimize_portfolio(returns_df: pd.DataFrame,
                         target_return: float = 0.001) -> dict:
     """
-    Minimum-variance portfolio optimization using PuLP.
+    Minimum-variance portfolio optimization using scipy SLSQP.
+    PuLP was replaced because it is a LINEAR solver and cannot multiply
+    two variables (quadratic objective). scipy handles this natively.
+
     `returns_df`: columns = stock symbols, rows = daily returns.
-    Capped at 5 stocks for solver speed on free hardware.
     Returns {symbol: weight} dict.
     """
     try:
-        import pulp
+        from scipy.optimize import minimize
     except ImportError:
-        log.error("PuLP not installed. Run: pip install PuLP")
+        log.error("scipy not installed — pip install scipy")
         return {}
 
     # Cap at 5 stocks
@@ -192,32 +194,49 @@ def optimize_portfolio(returns_df: pd.DataFrame,
     returns_df = returns_df[stocks].dropna()
     n = len(stocks)
 
-    mu  = returns_df.mean().values       # expected returns
+    if n < 2 or len(returns_df) < 10:
+        log.warning("Not enough data for portfolio optimization.")
+        return {s: round(1 / n, 4) for s in stocks}
+
+    mu  = returns_df.mean().values       # expected daily returns
     cov = returns_df.cov().values        # covariance matrix
 
-    problem = pulp.LpProblem("min_variance", pulp.LpMinimize)
-    w = [pulp.LpVariable(f"w_{s}", lowBound=0, upBound=1) for s in stocks]
+    # Objective: minimize portfolio variance  w^T * Σ * w
+    def portfolio_variance(w):
+        return float(w @ cov @ w)
 
-    # Objective: minimize portfolio variance (sum of w_i * w_j * cov_ij)
-    variance = pulp.lpSum(
-        w[i] * w[j] * float(cov[i][j])
-        for i in range(n) for j in range(n)
+    # Gradient (speeds up solver)
+    def portfolio_variance_grad(w):
+        return 2 * cov @ w
+
+    constraints = [
+        # weights must sum to 1
+        {"type": "eq",   "fun": lambda w: np.sum(w) - 1.0},
+        # expected return must meet the target
+        {"type": "ineq", "fun": lambda w: float(w @ mu) - target_return},
+    ]
+    bounds = [(0.0, 1.0)] * n             # no short-selling
+    w0     = np.ones(n) / n              # start from equal weights
+
+    result = minimize(
+        portfolio_variance, w0,
+        jac=portfolio_variance_grad,
+        method="SLSQP",
+        bounds=bounds,
+        constraints=constraints,
+        options={"ftol": 1e-9, "maxiter": 500},
     )
-    problem += variance
 
-    # Constraints
-    problem += pulp.lpSum(w) == 1                        # weights sum to 1
-    problem += pulp.lpSum(mu[i] * w[i] for i in range(n)) >= target_return  # min return
+    if result.success:
+        raw     = result.x
+        # Clean up tiny negatives from numerical noise
+        raw     = np.clip(raw, 0, 1)
+        raw    /= raw.sum()              # re-normalise to exactly 1
+        weights = {stocks[i]: round(float(raw[i]), 4) for i in range(n)}
+    else:
+        log.warning(f"Portfolio optimizer did not converge: {result.message}. Using equal weights.")
+        weights = {s: round(1 / n, 4) for s in stocks}
 
-    solver = pulp.PULP_CBC_CMD(msg=False)
-    problem.solve(solver)
-
-    if pulp.LpStatus[problem.status] != "Optimal":
-        log.warning("PuLP optimization did not find an optimal solution — returning equal weights.")
-        equal = 1.0 / n
-        return {s: equal for s in stocks}
-
-    weights = {stocks[i]: round(float(w[i].value() or 0), 4) for i in range(n)}
     log.info(f"Portfolio weights: {weights}")
     return weights
 
