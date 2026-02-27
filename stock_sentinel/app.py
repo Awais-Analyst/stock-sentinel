@@ -576,39 +576,71 @@ Then we check: **did the AI beat buy-and-hold?**
             with st.expander(f"💡 {t('What is this?')}"):
                 st.markdown(t("Spread your money across multiple stocks to reduce risk. Like not putting all eggs in one basket."))
 
-            selected_stocks = st.multiselect(
-                t("Pick 2-5 stocks to combine:"), options=STOCKS, default=["AAPL","MSFT"], max_selections=5)
+            st.caption(t("Type any stock symbols, separated by commas. Pakistani stocks need .KA suffix (e.g. NBP.KA, MCB.KA)"))
+            stocks_input = st.text_input(
+                t("Enter 2–10 stock symbols:"),
+                value="AAPL, MSFT, TSLA",
+                placeholder="e.g. AAPL, MSFT, NBP.KA, MCB.KA, OGDC.KA",
+                key="portfolio_symbols_input",
+            )
+
+            # Parse user input into a clean list
+            selected_stocks = [s.strip().upper() for s in stocks_input.split(",") if s.strip()]
+            selected_stocks = list(dict.fromkeys(selected_stocks))  # deduplicate
+
+            if len(selected_stocks) > 10:
+                st.warning(t("Maximum 10 stocks. Only the first 10 will be used."))
+                selected_stocks = selected_stocks[:10]
+
+            if len(selected_stocks) < 2:
+                st.info(t("Enter at least 2 stock symbols separated by commas."))
+
             if st.button(t("Find Best Mix"), key="opt_btn") and len(selected_stocks) >= 2:
                 from backtesting import optimize_portfolio
                 from data_pipeline import get_stock_data
                 all_returns, failed = {}, []
-                for s in selected_stocks:
+                progress = st.progress(0, text=t("Fetching stock data…"))
+                for i, s in enumerate(selected_stocks):
+                    progress.progress((i + 1) / len(selected_stocks), text=t(f"Loading {s}…"))
                     try:
                         s_df = get_stock_data(s, str(start_date), str(end_date))
-                        if not s_df.empty:
+                        if not s_df.empty and "Close" in s_df.columns:
                             all_returns[s] = s_df["Close"].pct_change().dropna()
                         else:
                             failed.append(s)
                     except Exception:
                         failed.append(s)
+                progress.empty()
+
                 if failed:
-                    st.warning(t(f"No data for: {', '.join(failed)}"))
+                    st.warning(t(f"Could not load data for: {', '.join(failed)}. Check symbols on Yahoo Finance."))
                 if len(all_returns) >= 2:
                     try:
                         returns_df_multi = pd.DataFrame(all_returns).dropna()
-                        weights = optimize_portfolio(returns_df_multi, target_return=0.0005)
-                        wt_df = pd.DataFrame(list(weights.items()), columns=[t("Stock"), t("Recommended %")])
-                        wt_df[t("Recommended %")] = (wt_df[t("Recommended %")] * 100).round(1)
-                        fig_pie = px.pie(wt_df, names=t("Stock"), values=t("Recommended %"),
-                                         title=t("Suggested Portfolio Split"),
-                                         color_discrete_sequence=px.colors.qualitative.Safe)
-                        fig_pie.update_layout(paper_bgcolor="rgba(0,0,0,0)", font=dict(color="#444444"))
-                        st.plotly_chart(fig_pie, use_container_width=True)
-                        st.dataframe(wt_df, use_container_width=True, hide_index=True)
+                        if returns_df_multi.empty:
+                            st.error(t("Not enough overlapping data. Try a longer date range."))
+                        else:
+                            weights = optimize_portfolio(returns_df_multi, target_return=0.0005)
+                            wt_df = pd.DataFrame(list(weights.items()), columns=[t("Stock"), t("Recommended %")])
+                            wt_df[t("Recommended %")] = (wt_df[t("Recommended %")] * 100).round(1)
+                            wt_df = wt_df.sort_values(t("Recommended %"), ascending=False)
+                            col_pie, col_tbl = st.columns([3, 2])
+                            with col_pie:
+                                fig_pie = px.pie(
+                                    wt_df, names=t("Stock"), values=t("Recommended %"),
+                                    title=t("Suggested Portfolio Split"),
+                                    color_discrete_sequence=px.colors.qualitative.Safe,
+                                )
+                                fig_pie.update_layout(paper_bgcolor="rgba(0,0,0,0)", font=dict(color="#444444"))
+                                st.plotly_chart(fig_pie, use_container_width=True)
+                            with col_tbl:
+                                st.markdown(f"**{t('Allocation')}**")
+                                st.dataframe(wt_df, use_container_width=True, hide_index=True)
+                                st.caption(t("Put these % of your budget in each stock to minimize risk."))
                     except Exception as e:
                         st.error(t(f"Optimizer failed: {e}"))
                 else:
-                    st.error(t("Not enough data. Try different symbols or longer date range."))
+                    st.error(t("None of the symbols returned data. Check symbols and try a longer date range."))
 
         except Exception as e:
             st.error(t(f"Strategy test failed: {e}"))
