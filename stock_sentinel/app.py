@@ -1,14 +1,12 @@
 """
 app.py — Stock Sentinel Streamlit Dashboard.
-Beginner-friendly version: plain-English labels, explanations, and full error handling.
+Features: Price Charts, Sentiment, Backtest, AI Advisor (XAI), Multi-Language.
 """
 
 import io
 import sys
 import os
-
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import math
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -17,7 +15,6 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-# ─── Page config ────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Stock Sentinel",
     page_icon="📈",
@@ -25,7 +22,38 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ─── Optional library warnings ──────────────────────────────────────────────
+# ─────────────────────────────────────────
+# LANGUAGE / TRANSLATION SYSTEM
+# ─────────────────────────────────────────
+LANG_OPTIONS = {
+    "English 🇬🇧":  "en",
+    "Urdu 🇵🇰":     "ur",
+    "Arabic 🇸🇦":   "ar",
+    "Chinese 🇨🇳":  "zh-CN",
+    "French 🇫🇷":   "fr",
+    "Hindi 🇮🇳":    "hi",
+}
+
+@st.cache_data(show_spinner=False, ttl=86400)
+def translate(text: str, target_lang: str) -> str:
+    """Translate text to target language using deep-translator. Cached for 24h."""
+    if target_lang == "en" or not text:
+        return text
+    try:
+        from deep_translator import GoogleTranslator
+        return GoogleTranslator(source="en", target=target_lang).translate(text)
+    except Exception:
+        return text  # fallback to English silently
+
+def t(text: str) -> str:
+    """Shorthand: translate to current UI language."""
+    lang = st.session_state.get("ui_lang", "en")
+    return translate(text, lang)
+
+
+# ─────────────────────────────────────────
+# OPTIONAL IMPORTS
+# ─────────────────────────────────────────
 def _try_import(*modules):
     for mod in modules:
         try:
@@ -33,7 +61,7 @@ def _try_import(*modules):
         except ImportError:
             st.warning(f"Optional library '{mod}' not installed — some features disabled.")
 
-_try_import("wordcloud", "prophet", "pulp")
+_try_import("wordcloud", "prophet", "pulp", "shap")
 
 from utils import (
     NEWS_API_KEY, NEWSDATA_API_KEY, NEWS_SOURCE, STOCKS,
@@ -42,82 +70,72 @@ from utils import (
     plot_sentiment_bars, generate_report_text,
 )
 
-# ─────────────────────────────────────────────
+# ─────────────────────────────────────────
 # SIDEBAR
-# ─────────────────────────────────────────────
+# ─────────────────────────────────────────
 with st.sidebar:
     st.title("📈 Stock Sentinel")
-    st.caption("AI-powered stock analysis · For educational use only")
+    st.caption(t("AI-powered stock analysis · For educational use only"))
     st.divider()
 
+    # Language selector
+    selected_lang_name = st.selectbox(
+        "🌐 Interface Language",
+        options=list(LANG_OPTIONS.keys()),
+        index=0,
+    )
+    st.session_state["ui_lang"] = LANG_OPTIONS[selected_lang_name]
+
     symbol = st.text_input(
-        "Stock Symbol",
-        value="AAPL",
-        placeholder="e.g. AAPL, TSLA, NBP.KA",
-        help="Type any stock ticker. Pakistani stocks need .KA suffix (e.g. NBP.KA, MCB.KA)"
+        t("Stock Symbol"), value="AAPL",
+        placeholder=t("e.g. AAPL, TSLA, NBP.KA"),
+        help=t("Pakistani stocks need .KA suffix (e.g. NBP.KA, MCB.KA)")
     ).upper().strip()
 
     col1, col2 = st.columns(2)
     with col1:
-        start_date = st.date_input("From", value=pd.to_datetime(DEFAULT_START))
+        start_date = st.date_input(t("From"), value=pd.to_datetime(DEFAULT_START))
     with col2:
-        end_date = st.date_input("To", value=pd.to_datetime(DEFAULT_END))
+        end_date = st.date_input(t("To"), value=pd.to_datetime(DEFAULT_END))
 
-    # Date validation
     if start_date >= end_date:
-        st.error("'From' date must be before 'To' date.")
+        st.error(t("'From' date must be before 'To' date."))
         st.stop()
 
-    date_range_days = (end_date - start_date).days
-    if date_range_days < 60:
-        st.warning(
-            "⚠️ Date range is less than 2 months. This may not have enough data "
-            "for charts to work. Try selecting at least 3 months."
-        )
+    if (end_date - start_date).days < 60:
+        st.warning(t("Select at least 3 months for best results."))
 
-    news_source = st.selectbox(
-        "News Source",
-        ["auto", "newsapi", "newsdata"],
-        index=0,
-        help="'auto' tries NewsAPI first, falls back to NewsData.io"
-    )
-    newsapi_key  = st.text_input("NewsAPI Key",  value=NEWS_API_KEY,
-                                  type="password", placeholder="Enter NewsAPI key")
-    newsdata_key = st.text_input("NewsData Key", value=NEWSDATA_API_KEY,
-                                  type="password", placeholder="Enter NewsData.io key")
+    news_source  = st.selectbox(t("News Source"), ["auto", "newsapi", "newsdata"], index=0)
+    newsapi_key  = st.text_input(t("NewsAPI Key"),  value=NEWS_API_KEY,  type="password")
+    newsdata_key = st.text_input(t("NewsData Key"), value=NEWSDATA_API_KEY, type="password")
 
     st.divider()
-    run_lstm          = st.toggle("Enable LSTM (slow)", value=False,
-                                   help="LSTM is a deep learning model — takes 2-3 min. Disable for speed.")
-    run_backtest_flag = st.toggle("Run Strategy Test", value=True,
-                                   help="Simulate buying/selling based on AI predictions")
-    refresh           = st.button("🔄 Refresh Data", use_container_width=True)
+    run_lstm          = st.toggle(t("Enable Deep Learning (slow)"), value=False)
+    run_backtest_flag = st.toggle(t("Run Strategy Test"), value=True)
+    run_advisor       = st.toggle(t("Run AI Advisor 🧠"), value=True,
+                                   help=t("AI investment advice with probability scores"))
+    refresh           = st.button(t("🔄 Refresh Data"), use_container_width=True)
 
     st.divider()
-    st.markdown(
-        "<small>⚠️ **Disclaimer**: This tool is for educational and simulation "
-        "purposes only. It is NOT financial advice.</small>",
-        unsafe_allow_html=True,
-    )
+    st.markdown(f"<small>⚠️ {t('For educational use only. NOT financial advice.')}</small>",
+                unsafe_allow_html=True)
 
-# ─── Top banner ─────────────────────────────────────────────────────────────
+
+# ─── Top banner ────────────────────────────────────────────────────────────
 st.warning(
-    "⚠️ **Educational / Simulation Only** — Stock Sentinel is NOT financial advice. "
-    "All charts and strategy tests use historical data. Do NOT make real investment "
-    "decisions based on this tool.",
+    f"⚠️ {t('Educational / Simulation Only')} — {t('Stock Sentinel is NOT financial advice. All forecasts are simulations using historical data.')}",
     icon="⚠️",
 )
 st.title(f"📊 {symbol} — Stock Sentinel")
 
-# ─────────────────────────────────────────────
-# CACHED DATA LOADERS
-# ─────────────────────────────────────────────
 
-@st.cache_data(show_spinner="Fetching price & news data…")
+# ─────────────────────────────────────────
+# CACHED LOADERS
+# ─────────────────────────────────────────
+@st.cache_data(show_spinner=t("Fetching price & news data…"))
 def load_data(sym, start, end, na_key, nd_key, news_src, _force):
     from data_pipeline import build_dataset
     from sentiment import add_sentiment_to_df, clean_text
-
     df, texts_by_date = build_dataset(
         sym, str(start), str(end),
         newsapi_key=na_key, newsdata_key=nd_key,
@@ -125,17 +143,14 @@ def load_data(sym, start, end, na_key, nd_key, news_src, _force):
     )
     if df.empty:
         return df, {}, []
-
-    cleaned_by_date = {
-        date: [clean_text(t) for t in texts]
-        for date, texts in texts_by_date.items()
-    }
+    cleaned_by_date = {date: [clean_text(tx) for tx in texts]
+                       for date, texts in texts_by_date.items()}
     df = add_sentiment_to_df(df, cleaned_by_date)
-    all_cleaned = [t for texts in cleaned_by_date.values() for t in texts]
+    all_cleaned = [tx for texts in cleaned_by_date.values() for tx in texts]
     return df, cleaned_by_date, all_cleaned
 
 
-@st.cache_resource(show_spinner="Running price forecast (Prophet)…")
+@st.cache_resource(show_spinner=t("Running price forecast…"))
 def load_prophet(df_hash, df_json, horizon=30):
     from modeling import add_technical_indicators, add_lag_features, forecast_with_prophet
     df = pd.read_json(io.StringIO(df_json))
@@ -148,7 +163,7 @@ def load_prophet(df_hash, df_json, horizon=30):
     return forecast_with_prophet(df, horizon=horizon)
 
 
-@st.cache_resource(show_spinner="Training AI (LSTM) model — this takes a few minutes…")
+@st.cache_resource(show_spinner=t("Training deep learning model…"))
 def load_lstm(df_hash, df_json):
     from modeling import add_technical_indicators, add_lag_features, train_lstm, predict_lstm
     df = pd.read_json(io.StringIO(df_json))
@@ -164,55 +179,51 @@ def load_lstm(df_hash, df_json):
         try:
             preds = predict_lstm(model, scaler, df)
         except Exception:
-            preds = None
+            pass
     return preds, train_m, test_m
 
 
-# ─────────────────────────────────────────────
-# LOAD DATA — auto-refresh when symbol or dates change
-# ─────────────────────────────────────────────
-force_token = int(st.session_state.get("refresh_count", 0))
+@st.cache_resource(show_spinner=t("Training AI Advisor model…"))
+def load_advisor(df_hash, df_json):
+    """Train RandomForest advisor model. Cached after first run."""
+    from xai_advisor import train_advisor_model
+    df = pd.read_json(io.StringIO(df_json))
+    df.index = pd.to_datetime(df.index)
+    return train_advisor_model(df)
 
+
+# ─────────────────────────────────────────
+# LOAD & PREPARE DATA
+# ─────────────────────────────────────────
+force_token = int(st.session_state.get("refresh_count", 0))
 _prev_key = st.session_state.get("_last_query_key", "")
 _curr_key = f"{symbol}|{start_date}|{end_date}"
 if _prev_key != _curr_key:
     force_token += 1
     st.session_state["refresh_count"] = force_token
     st.session_state["_last_query_key"] = _curr_key
-
 if refresh:
     force_token += 1
     st.session_state["refresh_count"] = force_token
     st.session_state["_last_query_key"] = _curr_key
 
-with st.spinner("Loading stock data…"):
+with st.spinner(t("Loading stock data…")):
     try:
         df, cleaned_by_date, all_texts = load_data(
             symbol, start_date, end_date,
             newsapi_key, newsdata_key, news_source, force_token,
         )
     except Exception as e:
-        st.error(
-            f"**Could not load data for `{symbol}`.**\n\n"
-            f"Possible reasons:\n"
-            f"- Wrong symbol (Pakistani stocks need `.KA` suffix: `NBP.KA`, `MCB.KA`)\n"
-            f"- No internet connection\n"
-            f"- Yahoo Finance temporarily unavailable\n\n"
-            f"Technical detail: `{e}`"
-        )
+        st.error(t(f"Could not load data for '{symbol}'. Check symbol and connection. Error: {e}"))
         st.stop()
 
 if df is None or df.empty:
     st.error(
-        f"**No data found for `{symbol}`** between {start_date} and {end_date}.\n\n"
-        f"Try:\n"
-        f"- Check the symbol at [Yahoo Finance](https://finance.yahoo.com)\n"
-        f"- Pakistani stocks: use `NBP.KA`, `MCB.KA`, `OGDC.KA` format\n"
-        f"- Extend the date range (more historical data = better results)"
+        t(f"No data found for '{symbol}' between {start_date} and {end_date}. "
+          f"Pakistani stocks: use NBP.KA, MCB.KA format.")
     )
     st.stop()
 
-# ─── Technical indicators ────────────────────────────────────────────────────
 try:
     from modeling import add_technical_indicators, add_lag_features, naive_baseline, detect_anomalies
     df = add_technical_indicators(df)
@@ -220,16 +231,13 @@ try:
     df = detect_anomalies(df)
     df.dropna(inplace=True)
 except Exception as e:
-    st.error(f"Error computing technical indicators: `{e}`")
+    st.error(t(f"Error computing indicators: {e}"))
     st.stop()
 
 if df.empty or len(df) < 5:
     st.error(
-        f"**Not enough data for `{symbol}`** to draw charts.\n\n"
-        f"**Why?** Price charts need at least **30 trading days** of data "
-        f"(about 6 weeks). Technical indicators like MACD require 26 days just to warm up.\n\n"
-        f"**Fix:** Select a date range of at least **3 months**, "
-        f"or check the symbol is correct (Pakistani stocks: `NBP.KA`)."
+        t(f"Not enough data for '{symbol}'. Select at least 3 months date range. "
+          f"Pakistani stocks: NBP.KA, MCB.KA, OGDC.KA")
     )
     st.stop()
 
@@ -237,53 +245,71 @@ if df.empty or len(df) < 5:
 metrics    = {}
 horizon    = 30
 lstm_preds = None
+forecast   = None
 
-# ─────────────────────────────────────────────
-# QUICK SUMMARY CARD (plain English for everyone)
-# ─────────────────────────────────────────────
-trend = "📈 Going UP" if df["Close"].iloc[-1] > df["Close"].iloc[0] else "📉 Going DOWN"
+# Build JSON for ML models
+try:
+    df_cols = [c for c in ["Open","High","Low","Close","Volume","sentiment"] if c in df.columns]
+    df_json = df[df_cols].to_json()
+    df_hash = hash(df_json[:500])
+except Exception:
+    df_json = df[["Close"]].to_json()
+    df_hash = hash(df_json[:500])
+
+
+# ─────────────────────────────────────────
+# QUICK SUMMARY CARD
+# ─────────────────────────────────────────
 price_change_pct = ((df["Close"].iloc[-1] - df["Close"].iloc[0]) / df["Close"].iloc[0]) * 100
-mean_sentiment = df["sentiment"].mean() if "sentiment" in df.columns else 0.0
-sentiment_label = "🟢 Positive news" if mean_sentiment > 0.05 else ("🔴 Negative news" if mean_sentiment < -0.05 else "⚪ Neutral news")
+trend_label = ("📈 " + t("Going UP")) if price_change_pct >= 0 else ("📉 " + t("Going DOWN"))
+mean_sentiment = float(df["sentiment"].mean()) if "sentiment" in df.columns else 0.0
+if   mean_sentiment >  0.05: mood_label = "🟢 " + t("Positive news")
+elif mean_sentiment < -0.05: mood_label = "🔴 " + t("Negative news")
+else:                         mood_label = "⚪ " + t("Neutral news")
 
-st.markdown("### 📋 Quick Summary")
+st.markdown(f"### {t('Quick Summary')}")
 s1, s2, s3, s4 = st.columns(4)
-s1.metric("Price Trend (selected period)", trend, f"{price_change_pct:+.1f}%")
-s2.metric("Current Price", f"${df['Close'].iloc[-1]:.2f}")
-s3.metric("News Mood", sentiment_label)
-s4.metric("Unusual Days Detected", f"{int(df['anomaly'].sum())} days" if "anomaly" in df.columns else "N/A")
+s1.metric(t("Price Trend"),    trend_label, f"{price_change_pct:+.1f}%")
+s2.metric(t("Latest Price"),   f"${df['Close'].iloc[-1]:.2f}")
+s3.metric(t("News Mood"),      mood_label)
+s4.metric(t("Unusual Days"),   f"{int(df['anomaly'].sum())}" if "anomaly" in df.columns else "N/A")
 
-with st.expander("💡 What does this summary mean?"):
-    st.markdown("""
+with st.expander(f"💡 {t('What does this summary mean?')}"):
+    st.markdown(t("""
 | Term | Plain explanation |
 |---|---|
 | **Price Trend** | Did the stock go up or down over your selected dates? |
-| **Current Price** | The last closing price in your date range |
-| **News Mood** | Were recent news headlines mostly good or bad about this company? |
-| **Unusual Days** | Days when the stock moved in a very unexpected way (AI-detected) |
-""")
+| **Latest Price** | The last closing price in your date range |
+| **News Mood** | Were recent news headlines mostly good or bad? |
+| **Unusual Days** | AI-detected days when prices moved unexpectedly |
+"""))
 
 st.divider()
 
-# ─────────────────────────────────────────────
+# ─────────────────────────────────────────
 # TABS
-# ─────────────────────────────────────────────
-tab1, tab2, tab3 = st.tabs(["📈 Price Chart & Forecast", "📰 News Mood", "🎯 Strategy Test"])
+# ─────────────────────────────────────────
+tab1, tab2, tab3, tab4 = st.tabs([
+    f"📈 {t('Price Chart')}",
+    f"📰 {t('News Mood')}",
+    f"🎯 {t('Strategy Test')}",
+    f"🧠 {t('AI Advisor')}",
+])
 
 
-# ═══════════════════════════════════════════════
+# ═══════════════════════════════════════
 # TAB 1 — PRICE CHART & FORECAST
-# ═══════════════════════════════════════════════
+# ═══════════════════════════════════════
 with tab1:
-    st.subheader(f"{symbol} — Price History")
+    st.subheader(t(f"{symbol} — Price History"))
 
-    with st.expander("💡 How to read the price chart"):
-        st.markdown("""
+    with st.expander(f"💡 {t('How to read the price chart')}"):
+        st.markdown(t("""
 - **Green candles** = the price went UP that day
 - **Red candles** = the price went DOWN that day
 - **Red ✕ marks** = unusual/unexpected price movements detected by AI
-- The **bottom panel** shows how many shares were traded (Volume)
-        """)
+- **Bottom panel** = how many shares were traded (higher = more activity)
+        """))
 
     try:
         fig_candle = plot_candlestick(df, symbol)
@@ -295,66 +321,51 @@ with tab1:
                     x=anomaly_df.index, y=anomaly_df["Close"],
                     mode="markers",
                     marker=dict(symbol="x", size=10, color="red"),
-                    name="Unusual Day",
-                    hovertemplate="<b>Unusual Day</b><br>%{x|%b %d, %Y}<br>Price: $%{y:.2f}<extra></extra>",
+                    name=t("Unusual Day"),
+                    hovertemplate=f"<b>{t('Unusual Day')}</b><br>%{{x|%b %d, %Y}}<br>{t('Price')}: $%{{y:.2f}}<extra></extra>",
                 ), row=1, col=1)
         st.plotly_chart(fig_candle, use_container_width=True)
     except Exception as e:
-        st.warning(f"Could not draw price chart: `{e}`")
+        st.warning(t(f"Could not draw price chart: {e}"))
 
     c1, c2, c3, c4 = st.columns(4)
     try:
-        c1.metric("Latest Price",    f"${df['Close'].iloc[-1]:.2f}",
-                  help="Last closing price in your date range")
-        c2.metric("Highest Price",   f"${df['Close'].max():.2f}",
-                  help="The highest the stock ever closed in this period")
-        c3.metric("Lowest Price",    f"${df['Close'].min():.2f}",
-                  help="The lowest the stock ever closed in this period")
-        c4.metric("Unusual Days",    f"{int(df['anomaly'].sum())}" if "anomaly" in df.columns else "N/A",
-                  help="Days when price moved in a surprising way, detected by AI")
+        c1.metric(t("Latest Price"),    f"${df['Close'].iloc[-1]:.2f}",  help=t("Last closing price"))
+        c2.metric(t("Highest Price"),   f"${df['Close'].max():.2f}",     help=t("Highest close in period"))
+        c3.metric(t("Lowest Price"),    f"${df['Close'].min():.2f}",     help=t("Lowest close in period"))
+        c4.metric(t("Unusual Days"),    f"{int(df['anomaly'].sum())}" if "anomaly" in df.columns else "N/A",
+                  help=t("AI-detected days with surprising price moves"))
     except Exception as e:
-        st.warning(f"Could not compute price stats: `{e}`")
+        st.warning(t(f"Error computing stats: {e}"))
 
     st.divider()
-    st.subheader("🔮 Price Forecast (AI Prediction)")
+    st.subheader(t(f"{symbol} — Price Forecast"))
 
-    with st.expander("💡 How to read the forecast chart"):
-        st.markdown("""
+    with st.expander(f"💡 {t('How to read the forecast chart')}"):
+        st.markdown(t("""
 - **Solid green line** = actual historical price
 - **Orange dashed line** = AI's best guess for future price
-- **Golden shaded area** = the range where the AI thinks the price will likely fall (80% confident)
-- **Dotted grey line** = simple "if tomorrow = today" baseline (used to check if AI is actually better)
+- **Golden shaded band** = range where AI thinks price will likely fall (80% confident)
+- **Grey dotted line** = simple "if tomorrow = today" benchmark
+> Wider band = more uncertain prediction. This is only a model output, not a guarantee!
+        """))
 
-> The wider the golden band, the **more uncertain** the forecast.
-> This is just a prediction — real prices can move very differently!
-        """)
+    horizon = st.slider(t("How many days to forecast?"), 7, 90, 30)
 
-    horizon = st.slider("How many days to forecast into the future?", 7, 90, 30)
-
-    try:
-        df_cols = [c for c in ["Open","High","Low","Close","Volume","sentiment"] if c in df.columns]
-        df_json = df[df_cols].to_json()
-        df_hash = hash(df_json[:500])
-    except Exception:
-        df_json = df[["Close"]].to_json()
-        df_hash = hash(df_json[:500])
-
-    forecast = None
-    with st.spinner("Running AI price forecast…"):
+    with st.spinner(t("Running AI price forecast…")):
         try:
             forecast = load_prophet(df_hash, df_json, horizon=horizon)
         except Exception as e:
-            st.warning(f"Forecast could not run: `{e}`. Make sure 'prophet' is installed.")
+            st.warning(t(f"Forecast failed: {e}"))
 
     try:
         baseline = naive_baseline(df)
     except Exception:
         baseline = None
 
-    # LSTM (optional)
     lstm_preds = None
     if run_lstm:
-        with st.spinner("Training deep learning model (LSTM) — this takes 2-3 minutes…"):
+        with st.spinner(t("Training deep learning model (2-3 min)…")):
             try:
                 lstm_preds, train_m, test_m = load_lstm(df_hash, df_json)
                 if lstm_preds is not None:
@@ -362,13 +373,9 @@ with tab1:
                     r2       = test_m.get("r2", None)
                     rmse_str = f"${rmse:.2f}" if isinstance(rmse, float) else "N/A"
                     r2_str   = f"{r2:.1%}"    if isinstance(r2,   float) else "N/A"
-                    st.success(
-                        f"✅ Deep learning model trained! "
-                        f"Average prediction error: **{rmse_str}** | "
-                        f"Accuracy score: **{r2_str}** (1.0 = perfect)"
-                    )
+                    st.success(t(f"Deep learning trained! Avg error: {rmse_str}, Accuracy: {r2_str}"))
             except Exception as e:
-                st.warning(f"Deep learning model failed: `{e}`")
+                st.warning(t(f"Deep learning model failed: {e}"))
 
     try:
         fig_fc = plot_forecast(df, forecast, symbol=symbol, baseline=baseline)
@@ -376,162 +383,117 @@ with tab1:
             import plotly.graph_objects as go
             fig_fc.add_trace(go.Scatter(
                 x=lstm_preds.index, y=lstm_preds.values,
-                name="Deep Learning Prediction",
+                name=t("Deep Learning Prediction"),
                 line=dict(color="#e056fd", width=1.5, dash="dash"),
-                hovertemplate="Deep Learning: $%{y:.2f}<extra></extra>",
             ))
         st.plotly_chart(fig_fc, use_container_width=True)
     except Exception as e:
-        st.warning(f"Could not draw forecast chart: `{e}`")
+        st.warning(t(f"Could not draw forecast: {e}"))
 
-    # Technical indicators — hidden by default, with plain labels
-    with st.expander("📐 Advanced Indicators (for experienced users)"):
-        st.markdown("""
-| Indicator | What it measures | Reading |
+    with st.expander(f"📐 {t('Advanced Indicators (for experienced users)')}"):
+        st.markdown(t("""
+| Indicator | What it measures | How to read |
 |---|---|---|
-| **RSI (14)** | Is the stock overbought or oversold? | Above 70 = may drop soon, Below 30 = may rise soon |
-| **MACD** | Is momentum increasing or decreasing? | Positive = upward momentum, Negative = downward |
-| **Bollinger Upper** | Upper price boundary (statistical) | Price near this = potentially overpriced |
-| **Bollinger Lower** | Lower price boundary (statistical) | Price near this = potentially underpriced |
-| **ATR (14)** | How much does the price swing daily? | Higher = more volatile/risky |
-        """)
+| **RSI (14)** | Is stock overbought or oversold? | >70 may drop, <30 may rise |
+| **MACD** | Is momentum increasing? | Positive = uptrend |
+| **Bollinger Upper/Lower** | Statistical price boundaries | Near upper = expensive, Near lower = cheap |
+| **ATR (14)** | Daily price swing size | Higher = more volatile/risky |
+        """))
         try:
             ind_cols = [c for c in ["rsi_14","macd","boll_upper","boll_lower","atr_14"] if c in df.columns]
             if ind_cols:
-                display_df = df[ind_cols].tail(20).copy()
-                display_df.columns = [
-                    c.replace("rsi_14","RSI (0-100)")
-                     .replace("macd","Momentum (MACD)")
-                     .replace("boll_upper","Upper Boundary")
-                     .replace("boll_lower","Lower Boundary")
-                     .replace("atr_14","Daily Swing (ATR)")
-                    for c in display_df.columns
-                ]
-                st.dataframe(display_df.round(2), use_container_width=True)
+                st.dataframe(df[ind_cols].tail(20).round(2), use_container_width=True)
         except Exception as e:
-            st.warning(f"Could not load indicator table: `{e}`")
+            st.warning(t(f"Indicator table error: {e}"))
 
 
-# ═══════════════════════════════════════════════
+# ═══════════════════════════════════════
 # TAB 2 — NEWS MOOD
-# ═══════════════════════════════════════════════
+# ═══════════════════════════════════════
 with tab2:
-    st.subheader(f"{symbol} — News & Social Media Mood")
+    st.subheader(t(f"{symbol} — News & Social Media Mood"))
 
-    with st.expander("💡 What is 'News Mood'?"):
-        st.markdown("""
-**Sentiment analysis** reads news headlines and social posts about a company and decides:
-- Is the tone **positive** (good news → green bars)?
-- Is the tone **negative** (bad news → red bars)?
-- Is the tone **neutral** (just facts, no emotion)?
-
-The score ranges from **-1.0** (very negative) to **+1.0** (very positive).
-
-This can sometimes predict whether a stock will go up or down the next day.
-        """)
+    with st.expander(f"💡 {t('What is News Mood?')}"):
+        st.markdown(t("""
+We read news headlines and decide: is the tone **good** (positive) or **bad** (negative)?
+Score: **-1.0** = very negative, **0** = neutral, **+1.0** = very positive.
+This sometimes predicts whether a stock will go up or down.
+        """))
 
     has_sentiment = "sentiment" in df.columns and df["sentiment"].abs().max() > 0.001
 
     if not has_sentiment:
-        st.info(
-            "📭 **No news data available** for this stock in the selected date range.\n\n"
-            "To see real news sentiment:\n"
-            "1. Get a free API key from [newsapi.org](https://newsapi.org)\n"
-            "2. Enter it in the sidebar under 'NewsAPI Key'\n"
-            "3. Click 'Refresh Data'\n\n"
-            "Without an API key, sentiment defaults to 0 (neutral)."
-        )
+        st.info(t("No news data available. Add a free API key from newsapi.org in the sidebar."))
     else:
-        # Sentiment bar chart
         try:
             fig_sent = plot_sentiment_bars(df["sentiment"], symbol=symbol)
             st.plotly_chart(fig_sent, use_container_width=True)
         except Exception as e:
-            st.warning(f"Could not draw news mood chart: `{e}`")
+            st.warning(t(f"Mood chart error: {e}"))
 
         c1, c2, c3 = st.columns(3)
-        mean_s = float(df["sentiment"].mean())
-        mood   = "Generally Positive 🟢" if mean_s > 0.05 else ("Generally Negative 🔴" if mean_s < -0.05 else "Mixed/Neutral ⚪")
-        c1.metric("Overall News Mood", mood,    help="Average tone of all news in this period")
-        c2.metric("Best Day Score",    f"{df['sentiment'].max():.2f}", help="Day with the most positive news (scale: -1 to +1)")
-        c3.metric("Worst Day Score",   f"{df['sentiment'].min():.2f}", help="Day with the most negative news (scale: -1 to +1)")
+        mood_word = t("Generally Positive 🟢") if mean_sentiment > 0.05 else (t("Generally Negative 🔴") if mean_sentiment < -0.05 else t("Neutral ⚪"))
+        c1.metric(t("Overall News Mood"),  mood_word)
+        c2.metric(t("Best Day Score"),     f"{df['sentiment'].max():.2f}")
+        c3.metric(t("Worst Day Score"),    f"{df['sentiment'].min():.2f}")
 
         st.divider()
         col_wc, col_kw = st.columns([2, 1])
-
         with col_wc:
-            st.markdown("**Most Talked-About Words in News**")
-            st.caption("Bigger word = mentioned more often in headlines")
+            st.markdown(f"**{t('Most Talked-About Words')}**")
             if all_texts:
                 try:
                     from sentiment import generate_wordcloud
                     wc_img = generate_wordcloud(all_texts)
-                    if wc_img is not None:
+                    if wc_img:
                         st.image(wc_img, use_container_width=True)
-                    else:
-                        st.info("Word cloud unavailable — install: pip install wordcloud")
                 except Exception as e:
-                    st.warning(f"Word cloud failed: `{e}`")
+                    st.warning(t(f"Word cloud error: {e}"))
             else:
-                st.info("No news text collected. Add an API key to get real news.")
+                st.info(t("No text data. Add NewsAPI key for real headlines."))
 
         with col_kw:
-            st.markdown("**Top Keywords**")
+            st.markdown(f"**{t('Top Keywords')}**")
             if all_texts:
                 try:
                     from sentiment import get_top_keywords
-                    keywords = get_top_keywords(all_texts, n=15)
-                    kw_df = pd.DataFrame(keywords, columns=["Word", "Times Mentioned"])
+                    kw_df = pd.DataFrame(get_top_keywords(all_texts, n=15), columns=[t("Word"), t("Times Mentioned")])
                     st.dataframe(kw_df, use_container_width=True, hide_index=True)
                 except Exception as e:
-                    st.warning(f"Keyword extraction failed: `{e}`")
+                    st.warning(t(f"Keywords error: {e}"))
 
         st.divider()
-        st.markdown("**Does News Mood Affect Price? (Correlation)**")
-        with st.expander("💡 How to read this table"):
-            st.markdown("""
-Numbers close to **+1.0** = when news is good, price tends to go up.
-Numbers close to **-1.0** = when news is good, price tends to go down (unusual).
-Numbers close to **0** = news mood and price don't seem related.
-            """)
+        st.markdown(f"**{t('Does News Mood Affect Price?')}**")
+        with st.expander(f"💡 {t('How to read the correlation table')}"):
+            st.markdown(t("Near +1.0 = good news → price up. Near -1.0 = good news → price down. Near 0 = no clear relationship."))
         try:
             from sentiment import sentiment_price_correlation
             corr = sentiment_price_correlation(df)
-            fig_corr = px.imshow(
-                corr, text_auto=".2f", aspect="auto",
-                color_continuous_scale="RdYlGn",
-                title="Relationship between News Mood and Price (correlation)",
-            )
-            fig_corr.update_layout(
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                font=dict(color="#444444"),
-            )
+            fig_corr = px.imshow(corr, text_auto=".2f", aspect="auto",
+                                 color_continuous_scale="RdYlGn",
+                                 title=t("Relationship: News Mood ↔ Price"))
+            fig_corr.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color="#444444"))
             st.plotly_chart(fig_corr, use_container_width=True)
         except Exception as e:
-            st.warning(f"Could not compute correlation: `{e}`")
+            st.warning(t(f"Correlation error: {e}"))
 
 
-# ═══════════════════════════════════════════════
+# ═══════════════════════════════════════
 # TAB 3 — STRATEGY TEST
-# ═══════════════════════════════════════════════
+# ═══════════════════════════════════════
 with tab3:
-    st.subheader(f"{symbol} — AI Strategy Test (Backtest)")
+    st.subheader(t(f"{symbol} — AI Strategy Test"))
 
-    with st.expander("💡 What is a Strategy Test?"):
-        st.markdown("""
-We give the AI **$10,000 of pretend money** and let it trade using the historical data.
-It decides when to **BUY** (news is positive + price predicted to rise) and
-when to **SELL** (news is negative or price predicted to fall).
-
-We then compare: **did the AI do better than just buying and holding?**
-
-> ⚠️ This is a **simulation** — it uses past data. Real markets are unpredictable.
-> DO NOT use these results to make real investment decisions.
-        """)
+    with st.expander(f"💡 {t('What is a Strategy Test?')}"):
+        st.markdown(t("""
+We give the AI **$10,000 of pretend money** and let it trade using historical data.
+It buys when news is positive + price predicted to rise, sells when negative.
+Then we check: **did the AI beat buy-and-hold?**
+> ⚠️ This is a simulation, NOT real trading advice.
+        """))
 
     if not run_backtest_flag:
-        st.info("Enable **'Run Strategy Test'** in the sidebar to see results.")
+        st.info(t("Enable 'Run Strategy Test' in the sidebar to see results."))
     else:
         try:
             from backtesting import generate_signals, run_backtest, calc_all_metrics, generate_insights
@@ -543,241 +505,328 @@ We then compare: **did the AI do better than just buying and holding?**
                 except Exception:
                     pred_col = "log_return"
 
-            with st.spinner("Running strategy test on historical data…"):
+            with st.spinner(t("Running strategy test…")):
                 signals      = generate_signals(df, pred_col=pred_col)
                 portfolio_df = run_backtest(df, signals, capital=INITIAL_CAPITAL, commission=COMMISSION)
                 metrics      = calc_all_metrics(portfolio_df, capital=INITIAL_CAPITAL)
 
-            # Equity curve
             try:
                 fig_eq = plot_equity_curve(portfolio_df, symbol=symbol)
                 st.plotly_chart(fig_eq, use_container_width=True)
             except Exception as e:
-                st.warning(f"Could not draw portfolio chart: `{e}`")
+                st.warning(t(f"Equity curve error: {e}"))
 
-            with st.expander("💡 How to read the portfolio chart"):
-                st.markdown("""
-- **Green line** = your portfolio value if you followed the AI's BUY/SELL signals
-- **Grey dotted line** = if you just bought at the start and held (no trading)
-- The strategy is **better** when the green line is above the grey line
-                """)
+            with st.expander(f"💡 {t('How to read the portfolio chart')}"):
+                st.markdown(t("""
+- **Green line** = value if following AI's buy/sell signals
+- **Grey dotted line** = value if you just bought and held
+- Green above grey = AI strategy performed better
+                """))
 
-            # Plain-English metrics
-            st.markdown("### 📊 Results in Simple Terms")
+            st.markdown(f"### {t('Results in Simple Terms')}")
             c1, c2, c3, c4, c5 = st.columns(5)
-
-            ret = metrics.get("total_return_pct", 0)
-            ret_label = "Profit" if ret >= 0 else "Loss"
-            c1.metric(
-                f"Total {ret_label}",
-                f"{abs(ret):.1f}%",
-                delta=f"{ret:+.1f}%",
-                help="Did the AI strategy make or lose money overall?"
-            )
-
+            ret    = metrics.get("total_return_pct", 0)
             sharpe = metrics.get("sharpe", 0)
-            sharpe_label = "Excellent" if sharpe > 1 else ("Good" if sharpe > 0.5 else ("Fair" if sharpe > 0 else "Poor"))
-            c2.metric(
-                "Profit vs Risk Score",
-                f"{sharpe:.2f} ({sharpe_label})",
-                help="Higher = better return for the risk taken. Above 1.0 is considered good."
-            )
+            var    = metrics.get("var_95", 0)
+            dd     = metrics.get("max_drawdown", 0)
 
-            var = metrics.get("var_95", 0)
-            c3.metric(
-                "Worst Day Loss Estimate",
-                f"{abs(var):.2%}",
-                help="On a really bad day, you'd lose about this much. (95% confidence)"
-            )
+            c1.metric(t("Total Profit/Loss"),     f"{ret:+.1f}%",
+                      help=t("Did the AI make or lose money overall?"))
+            c2.metric(t("Profit vs Risk Score"),  f"{sharpe:.2f}",
+                      help=t("Above 1.0 is good. Measures return vs risk taken."))
+            c3.metric(t("Worst Day Loss"),         f"{abs(var):.2%}",
+                      help=t("Estimated worst daily loss with 95% confidence."))
+            c4.metric(t("Biggest Drop from Peak"), f"{abs(dd):.2%}",
+                      help=t("Worst loss from the highest point to the lowest."))
+            c5.metric(t("Number of Trades"),       f"{metrics.get('num_trades', 0)}",
+                      help=t("Each trade has a 0.1% fee."))
 
-            dd = metrics.get("max_drawdown", 0)
-            c4.metric(
-                "Biggest Drop from Peak",
-                f"{abs(dd):.2%}",
-                help="The worst loss from the highest point to the lowest point"
-            )
-
-            c5.metric(
-                "Number of Trades",
-                f"{metrics.get('num_trades', 0)}",
-                help="How many times the AI decided to buy or sell"
-            )
-
-            with st.expander("💡 What do these numbers mean?"):
-                st.markdown(f"""
-| Result | Your Score | Plain Meaning |
-|---|---|---|
-| Total Return | {ret:+.1f}% | You {"made" if ret >= 0 else "lost"} {abs(ret):.1f}% on your pretend $10,000 |
-| Profit vs Risk | {sharpe:.2f} ({sharpe_label}) | {"Better than average" if sharpe > 1 else ("About average" if sharpe > 0.5 else "Below average")} compared to a typical good investment |
-| Worst Day Loss | {abs(var):.2%} | In 95% of bad days, you wouldn't lose more than this |
-| Biggest Drop | {abs(dd):.2%} | The stock once fell this much from its peak in a row |
-| Trades | {metrics.get("num_trades",0)} | Each trade has a 0.1% fee, so more trades = more fees |
-""")
-
-            # Buy/Sell signal table
-            with st.expander("📋 When did the AI say Buy or Sell?"):
+            with st.expander(f"📋 {t('When did the AI Buy/Sell?')}"):
                 try:
-                    sig_df = pd.DataFrame({"Signal": signals, "Price": df["Close"]})
-                    sig_df["Action"] = sig_df["Signal"].map({1: "🟢 BUY", -1: "🔴 SELL", 0: "⏸ HOLD"})
-                    active = sig_df[sig_df["Signal"] != 0][["Action","Price"]].tail(30)
-                    st.dataframe(active, use_container_width=True)
+                    sig_df = pd.DataFrame({"Signal": signals, t("Price"): df["Close"]})
+                    sig_df[t("Action")] = sig_df["Signal"].map({1: f"🟢 {t('BUY')}", -1: f"🔴 {t('SELL')}", 0: f"⏸ {t('HOLD')}"})
+                    st.dataframe(sig_df[sig_df["Signal"] != 0][[t("Action"), t("Price")]].tail(30), use_container_width=True)
                 except Exception as e:
-                    st.warning(f"Could not show signal table: `{e}`")
+                    st.warning(t(f"Signal table error: {e}"))
 
             st.divider()
-
-            # Narrative
-            st.markdown("**📝 Plain-English Summary**")
+            st.markdown(f"**📝 {t('Strategy Summary')}**")
             try:
-                narrative = generate_insights(metrics, symbol=symbol)
-                st.info(narrative)
+                st.info(generate_insights(metrics, symbol=symbol))
             except Exception as e:
-                st.warning(f"Could not generate summary: `{e}`")
+                st.warning(t(f"Summary error: {e}"))
 
             # Portfolio optimizer
             st.divider()
-            st.markdown("**🎯 Which Stocks to Mix? (Portfolio Optimizer)**")
-            with st.expander("💡 What is this?"):
-                st.markdown("""
-Instead of putting all your money in one stock, you can **spread it across several stocks**.
-This usually reduces risk. The optimizer figures out the best % to put in each stock
-to get a good return with the least risk.
-
-Think of it like: don't put all eggs in one basket.
-                """)
+            st.markdown(f"**🎯 {t('Portfolio Optimizer — Best Stock Mix')}**")
+            with st.expander(f"💡 {t('What is this?')}"):
+                st.markdown(t("Spread your money across multiple stocks to reduce risk. Like not putting all eggs in one basket."))
 
             selected_stocks = st.multiselect(
-                "Pick 2-5 stocks to combine into a portfolio:",
-                options=STOCKS,
-                default=["AAPL", "MSFT"],
-                max_selections=5,
-            )
-
-            if st.button("Find Best Mix", key="opt_btn") and len(selected_stocks) >= 2:
+                t("Pick 2-5 stocks to combine:"), options=STOCKS, default=["AAPL","MSFT"], max_selections=5)
+            if st.button(t("Find Best Mix"), key="opt_btn") and len(selected_stocks) >= 2:
                 from backtesting import optimize_portfolio
                 from data_pipeline import get_stock_data
-
-                with st.spinner("Fetching data for all selected stocks…"):
-                    all_returns = {}
-                    failed = []
-                    for s in selected_stocks:
-                        try:
-                            s_df = get_stock_data(s, str(start_date), str(end_date))
-                            if not s_df.empty and "Close" in s_df.columns:
-                                all_returns[s] = s_df["Close"].pct_change().dropna()
-                            else:
-                                failed.append(s)
-                        except Exception:
+                all_returns, failed = {}, []
+                for s in selected_stocks:
+                    try:
+                        s_df = get_stock_data(s, str(start_date), str(end_date))
+                        if not s_df.empty:
+                            all_returns[s] = s_df["Close"].pct_change().dropna()
+                        else:
                             failed.append(s)
-
-                    if failed:
-                        st.warning(f"Could not get data for: {', '.join(failed)}. Continuing without them.")
-
-                    if len(all_returns) >= 2:
-                        try:
-                            returns_df_multi = pd.DataFrame(all_returns).dropna()
-                            if returns_df_multi.empty:
-                                st.error("Not enough overlapping data between selected stocks.")
-                            else:
-                                weights = optimize_portfolio(returns_df_multi, target_return=0.0005)
-                                wt_df = pd.DataFrame(list(weights.items()), columns=["Stock", "Recommended %"])
-                                wt_df["Recommended %"] = (wt_df["Recommended %"] * 100).round(1)
-
-                                import plotly.graph_objects as go
-                                fig_pie = px.pie(
-                                    wt_df, names="Stock", values="Recommended %",
-                                    title="Suggested Portfolio Split",
-                                    color_discrete_sequence=px.colors.qualitative.Safe,
-                                )
-                                fig_pie.update_layout(
-                                    paper_bgcolor="rgba(0,0,0,0)",
-                                    font=dict(color="#444444"),
-                                )
-                                st.plotly_chart(fig_pie, use_container_width=True)
-                                st.dataframe(wt_df, use_container_width=True, hide_index=True)
-                                st.caption(
-                                    "This shows the mathematically optimal way to split $10,000 "
-                                    "across these stocks to minimize risk while targeting a small daily gain."
-                                )
-                        except Exception as e:
-                            st.error(f"Portfolio optimization failed: `{e}`")
-                    else:
-                        st.error("Not enough valid stock data to optimize. Try different symbols.")
-            elif st.session_state.get("opt_btn") and len(selected_stocks) < 2:
-                st.warning("Please select at least 2 stocks.")
+                    except Exception:
+                        failed.append(s)
+                if failed:
+                    st.warning(t(f"No data for: {', '.join(failed)}"))
+                if len(all_returns) >= 2:
+                    try:
+                        returns_df_multi = pd.DataFrame(all_returns).dropna()
+                        weights = optimize_portfolio(returns_df_multi, target_return=0.0005)
+                        wt_df = pd.DataFrame(list(weights.items()), columns=[t("Stock"), t("Recommended %")])
+                        wt_df[t("Recommended %")] = (wt_df[t("Recommended %")] * 100).round(1)
+                        fig_pie = px.pie(wt_df, names=t("Stock"), values=t("Recommended %"),
+                                         title=t("Suggested Portfolio Split"),
+                                         color_discrete_sequence=px.colors.qualitative.Safe)
+                        fig_pie.update_layout(paper_bgcolor="rgba(0,0,0,0)", font=dict(color="#444444"))
+                        st.plotly_chart(fig_pie, use_container_width=True)
+                        st.dataframe(wt_df, use_container_width=True, hide_index=True)
+                    except Exception as e:
+                        st.error(t(f"Optimizer failed: {e}"))
+                else:
+                    st.error(t("Not enough data. Try different symbols or longer date range."))
 
         except Exception as e:
-            st.error(
-                f"**Strategy test failed.**\n\n"
-                f"This can happen when there is not enough price data for signals to work.\n\n"
-                f"Technical detail: `{e}`"
+            st.error(t(f"Strategy test failed: {e}"))
+
+
+# ═══════════════════════════════════════
+# TAB 4 — AI ADVISOR (XAI)
+# ═══════════════════════════════════════
+with tab4:
+    st.subheader(t(f"{symbol} — AI Investment Advisor 🧠"))
+    st.caption(t("Powered by Explainable AI (SHAP) — every recommendation comes with a full explanation."))
+
+    with st.expander(f"💡 {t('What is Explainable AI?')}"):
+        st.markdown(t("""
+Normal AI says: *"The price will go up."*
+**Explainable AI says**: *"The price will go up BECAUSE:*
+*news mood is positive (+40%), RSI shows oversold condition (+30%), MACD is rising (+20%)"*
+
+You can see **why**, not just **what**. This makes the advice trustworthy and educational.
+        """))
+
+    if not run_advisor:
+        st.info(t("Enable 'Run AI Advisor' in the sidebar to see recommendations."))
+    else:
+        with st.spinner(t("Training AI advisor model…")):
+            try:
+                advisor_model, feature_cols, accuracy = load_advisor(df_hash, df_json)
+            except Exception as e:
+                advisor_model, feature_cols, accuracy = None, [], 0
+                st.warning(t(f"Advisor model error: {e}"))
+
+        if advisor_model is None or not feature_cols:
+            st.warning(
+                t("Not enough data to train the AI advisor. "
+                  "Select a longer date range (6+ months recommended).")
             )
+        else:
+            st.success(t(f"AI Advisor trained on {len(df)} days of data. Model accuracy: {accuracy}%"))
+
+            # Get advice
+            try:
+                from xai_advisor import get_investment_advice, get_shap_explanation, build_advice_narrative
+
+                advice = get_investment_advice(
+                    advisor_model, df, feature_cols, forecast_df=forecast
+                )
+                action     = advice.get("action", "HOLD")
+                confidence = advice.get("confidence", 50)
+                prob_up    = advice.get("probability_up", 50)
+                risk       = advice.get("risk_level", "Moderate")
+                health     = advice.get("health_score", 50)
+                reasons    = advice.get("reasons", [])
+
+                # ── Main recommendation badge ─────────────────────────
+                action_colors = {"BUY": "🟢", "SELL": "🔴", "HOLD": "🟡"}
+                action_emoji  = action_colors.get(action, "⚪")
+                action_labels = {
+                    "BUY":  t("CONSIDER BUYING"),
+                    "SELL": t("CONSIDER SELLING"),
+                    "HOLD": t("HOLD / WAIT"),
+                }
+
+                st.markdown(f"## {action_emoji} {t('AI Recommendation:')} **{action_labels.get(action, action)}**")
+
+                col_a, col_b, col_c, col_d = st.columns(4)
+                col_a.metric(
+                    t("Confidence"),
+                    f"{confidence:.0f}%",
+                    help=t("How confident is the AI in this recommendation?")
+                )
+                col_b.metric(
+                    t("Chance Price Rises (5 days)"),
+                    f"{prob_up:.0f}%",
+                    delta=f"{prob_up-50:.0f}% vs 50/50",
+                    help=t("Probability the price will be higher 5 trading days from now")
+                )
+                col_c.metric(
+                    t("Stock Health Score"),
+                    f"{health}/100",
+                    help=t("0=very weak, 50=neutral, 100=very healthy. Based on RSI, MACD, sentiment, momentum.")
+                )
+                col_d.metric(
+                    t("Risk Level"),
+                    risk,
+                    help=t("Based on how much the price swings daily (ATR indicator)")
+                )
+
+                # Health score visual bar
+                st.markdown(f"**{t('Stock Health Score Visual')}**")
+                health_color = "#00c48c" if health >= 60 else ("#f5a623" if health >= 40 else "#e84545")
+                st.markdown(
+                    f'<div style="background:#eee;border-radius:8px;height:20px;width:100%;">'
+                    f'<div style="background:{health_color};width:{health}%;height:20px;border-radius:8px;'
+                    f'display:flex;align-items:center;padding-left:8px;color:white;font-size:12px;">'
+                    f'{health}/100</div></div>',
+                    unsafe_allow_html=True
+                )
+                st.markdown("")
+
+                st.divider()
+
+                # ── Probability breakdown ─────────────────────────────
+                st.markdown(f"### 📊 {t('Probability Breakdown')}")
+                prob_df = pd.DataFrame({
+                    t("Outcome"):     [t("Price Goes Up 📈"), t("Price Goes Down 📉")],
+                    t("Probability"): [prob_up, 100 - prob_up],
+                })
+                fig_prob = px.bar(
+                    prob_df, x=t("Probability"), y=t("Outcome"),
+                    orientation="h",
+                    color=t("Outcome"),
+                    color_discrete_map={
+                        t("Price Goes Up 📈"):   "#00c48c",
+                        t("Price Goes Down 📉"): "#e84545",
+                    },
+                    title=t("Next 5-Day Price Direction Probability"),
+                    text=t("Probability"),
+                )
+                fig_prob.update_traces(texttemplate="%{text:.0f}%", textposition="inside")
+                fig_prob.update_layout(
+                    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                    showlegend=False, xaxis_range=[0, 100],
+                    font=dict(color="#444444"),
+                )
+                st.plotly_chart(fig_prob, use_container_width=True)
+
+                st.divider()
+
+                # ── SHAP Feature Contributions ────────────────────────
+                st.markdown(f"### 🔍 {t('Why is the AI saying this?')} ({t('SHAP Explanation')})")
+
+                with st.expander(f"💡 {t('How to read this chart')}"):
+                    st.markdown(t("""
+- **Green bars** = this factor is pushing the prediction **toward BUY** (positive)
+- **Red bars** = this factor is pushing the prediction **toward SELL** (negative)
+- **Longer bar** = stronger influence on the AI's decision
+                    """))
+
+                try:
+                    shap_vals = get_shap_explanation(advisor_model, df, feature_cols)
+                    if shap_vals:
+                        shap_df = pd.DataFrame({
+                            t("Factor"):      list(shap_vals.keys()),
+                            t("Influence"):   list(shap_vals.values()),
+                        })
+                        shap_df[t("Direction")] = shap_df[t("Influence")].apply(
+                            lambda v: f"🟢 {t('Supports BUY')}" if v > 0 else f"🔴 {t('Supports SELL')}"
+                        )
+                        fig_shap = px.bar(
+                            shap_df.head(8),
+                            x=t("Influence"), y=t("Factor"),
+                            orientation="h",
+                            color=t("Direction"),
+                            color_discrete_map={
+                                f"🟢 {t('Supports BUY')}":  "#00c48c",
+                                f"🔴 {t('Supports SELL')}": "#e84545",
+                            },
+                            title=t("What is driving the AI's recommendation?"),
+                        )
+                        fig_shap.update_layout(
+                            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                            showlegend=False, font=dict(color="#444444"),
+                        )
+                        st.plotly_chart(fig_shap, use_container_width=True)
+                    else:
+                        st.info(t("SHAP explanation not available — install 'shap' package."))
+                except Exception as e:
+                    st.warning(t(f"SHAP chart error: {e}. Install: pip install shap"))
+
+                st.divider()
+
+                # ── Plain-English reasons ─────────────────────────────
+                st.markdown(f"### 💬 {t('Reason-by-Reason Explanation')}")
+                for i, reason in enumerate(reasons, 1):
+                    st.markdown(f"**{i}.** {t(reason)}")
+
+                st.divider()
+
+                # ── Full narrative ────────────────────────────────────
+                st.markdown(f"### 📝 {t('Complete AI Report')}")
+                try:
+                    narrative = build_advice_narrative(advice, symbol)
+                    st.info(t(narrative))
+                except Exception as e:
+                    st.warning(t(f"Narrative error: {e}"))
+
+                # ── Final disclaimer ──────────────────────────────────
+                st.error(
+                    f"⚠️ **{t('IMPORTANT DISCLAIMER')}**: {t('This is an AI-generated analysis for educational purposes ONLY. It is NOT financial advice. The AI makes mistakes and past patterns do not guarantee future results. Always consult a qualified financial advisor before making any real investment decisions.')}"
+                )
+
+            except Exception as e:
+                st.error(t(f"AI Advisor failed to generate advice: {e}"))
 
 
-# ─────────────────────────────────────────────
-# CHAT QUERY BOX
-# ─────────────────────────────────────────────
+# ─────────────────────────────────────────
+# CHAT BOX (bottom)
+# ─────────────────────────────────────────
 st.divider()
-st.markdown("### 💬 Ask Stock Sentinel")
-st.caption("Ask a question in plain English — no technical knowledge needed!")
+st.markdown(f"### 💬 {t('Ask Stock Sentinel')}")
 
 user_query = st.text_input(
-    "What would you like to know?",
+    t("Ask anything about this stock in plain language:"),
     key="chat_input",
-    placeholder="e.g. 'Is AAPL doing well?' or 'Should I be worried about the risk?'",
+    placeholder=t("e.g. 'Is AAPL doing well?' or 'Should I be worried?'"),
 )
 
 if user_query:
     q = user_query.lower()
     try:
-        if any(k in q for k in ["predict", "forecast", "future", "price", "go up", "go down"]):
-            direction = "upward" if forecast is not None and not forecast.empty and \
-                        forecast["yhat"].iloc[-1] > df["Close"].iloc[-1] else "downward"
-            response = (
-                f"📈 **Price Forecast for {symbol}**: The AI model suggests a **{direction} trend** "
-                f"over the next {horizon} days. See the orange dashed line in the 'Price Chart & Forecast' tab. "
-                f"Remember: this is just a prediction, not a guarantee!"
-            )
-        elif any(k in q for k in ["news", "sentiment", "mood", "feel", "tweet", "social"]):
-            mood_word = "positive" if mean_sentiment > 0.05 else ("negative" if mean_sentiment < -0.05 else "neutral")
-            response = (
-                f"📰 **News Mood for {symbol}**: The overall news tone is **{mood_word}** "
-                f"(score: {mean_sentiment:.2f} on a -1 to +1 scale). "
-                f"Check the 'News Mood' tab for daily details and word clouds."
-            )
-        elif any(k in q for k in ["risk", "safe", "dangerous", "loss", "drawdown", "sharpe"]):
-            dd_pct = abs(metrics.get("max_drawdown", 0)) * 100
-            sharpe_val = metrics.get("sharpe", 0)
-            risk_word = "low" if dd_pct < 10 else ("moderate" if dd_pct < 25 else "high")
-            response = (
-                f"⚠️ **Risk Summary for {symbol}**: The strategy has **{risk_word} risk**. "
-                f"Biggest drop from peak: {dd_pct:.1f}%. "
-                f"Risk-adjusted score (Sharpe): {sharpe_val:.2f} "
-                f"({'good' if sharpe_val > 1 else 'average' if sharpe_val > 0 else 'poor'}). "
-                f"See the 'Strategy Test' tab for full details."
-            ) if metrics else "Enable **'Run Strategy Test'** in the sidebar to get risk information."
-        elif any(k in q for k in ["anomaly", "unusual", "crash", "spike", "strange"]):
-            n_anom = int(df["anomaly"].sum()) if "anomaly" in df.columns else 0
-            response = (
-                f"🚨 **Unusual Days for {symbol}**: The AI detected **{n_anom} unusual trading days** "
-                f"where the price moved in an unexpected way. "
-                f"These are shown as red ✕ marks on the price chart."
-            )
-        elif any(k in q for k in ["good", "bad", "buy", "sell", "worth", "invest", "recommend"]):
-            response = (
-                f"⚠️ **Stock Sentinel cannot make investment recommendations.** "
-                f"This tool is for education only. We show you data and patterns "
-                f"— but the decision is always yours. "
-                f"Please consult a qualified financial advisor for real investment decisions."
-            )
+        if any(k in q for k in ["predict","forecast","future","price","up","down"]):
+            direction = t("upward") if forecast is not None and not forecast.empty and forecast["yhat"].iloc[-1] > df["Close"].iloc[-1] else t("downward")
+            resp = t(f"The AI forecast shows a {direction} trend over the next {horizon} days. See the orange dashed line in the Price Chart tab. Remember: predictions are never 100% accurate!")
+        elif any(k in q for k in ["news","mood","sentiment","feel"]):
+            mood = t("positive") if mean_sentiment > 0.05 else (t("negative") if mean_sentiment < -0.05 else t("neutral"))
+            resp = t(f"The news mood for {symbol} is {mood} (score: {mean_sentiment:.2f}). Check the News Mood tab for day-by-day details.")
+        elif any(k in q for k in ["buy","sell","invest","recommend","should i"]):
+            if metrics or run_advisor:
+                action_now = advice.get("action","HOLD") if "advice" in dir() else "HOLD"
+                prob       = advice.get("probability_up", 50) if "advice" in dir() else 50
+                resp = t(f"The AI recommends: {action_now} (confidence: {confidence:.0f}%, probability of price rise: {prob:.0f}%). See the AI Advisor tab for full explanation. ⚠️ This is NOT real financial advice!")
+            else:
+                resp = t("Enable 'Run AI Advisor' in the sidebar to get a buy/sell recommendation.")
+        elif any(k in q for k in ["risk","safe","dangerous","loss"]):
+            risk_now = advice.get("risk_level","Moderate") if "advice" in dir() else t("unknown")
+            resp = t(f"Current risk level for {symbol}: {risk_now}. See the AI Advisor tab for detailed risk breakdown.")
+        elif any(k in q for k in ["anomaly","unusual","crash","spike"]):
+            n = int(df["anomaly"].sum()) if "anomaly" in df.columns else 0
+            resp = t(f"The AI detected {n} unusual trading days for {symbol}. They appear as red ✕ marks on the price chart.")
         else:
-            response = (
-                f"I can answer questions about: **price forecasts**, **news mood**, "
-                f"**risk levels**, and **unusual price movements** for {symbol}. "
-                f"Try asking: 'Is the price going up?', 'How risky is this stock?', "
-                f"or 'What is the latest news mood?'"
-            )
+            resp = t(f"I can answer questions about: price forecasts, news mood, buy/sell recommendations, risk, and unusual price movements for {symbol}. Try: 'Is the price going up?' or 'How risky is this?'")
     except Exception:
-        response = "Sorry, I couldn't process that question. Try asking differently."
+        resp = t("Sorry, I couldn't process that. Try rephrasing your question.")
 
-    st.markdown(f"**🤖 Sentinel:** {response}")
+    st.markdown(f"**🤖 Sentinel:** {resp}")
