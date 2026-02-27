@@ -183,13 +183,21 @@ def load_lstm(df_hash, df_json):
     return preds, train_m, test_m
 
 
-@st.cache_resource(show_spinner=t("Training AI Advisor model…"))
+@st.cache_resource(show_spinner="Training AI Advisor model...")
 def load_advisor(df_hash, df_json):
-    """Train RandomForest advisor model. Cached after first run."""
-    from xai_advisor import train_advisor_model
-    df = pd.read_json(io.StringIO(df_json))
-    df.index = pd.to_datetime(df.index)
-    return train_advisor_model(df)
+    """Train RandomForest advisor model. Returns (model, feature_cols, accuracy, error_msg)."""
+    try:
+        from xai_advisor import train_advisor_model
+    except ImportError:
+        # xai_advisor.py not found on the server — tell the user exactly what to do
+        return None, [], 0, "MODULE_MISSING"
+    try:
+        df = pd.read_json(io.StringIO(df_json))
+        df.index = pd.to_datetime(df.index)
+        model, cols, acc = train_advisor_model(df)
+        return model, cols, acc, None
+    except Exception as e:
+        return None, [], 0, str(e)
 
 
 # ─────────────────────────────────────────
@@ -241,11 +249,17 @@ if df.empty or len(df) < 5:
     )
     st.stop()
 
-# Safe defaults
+# Safe defaults — these prevent NameError in chat box if tabs haven't run
 metrics    = {}
 horizon    = 30
 lstm_preds = None
 forecast   = None
+advice     = {}
+action     = "HOLD"
+confidence = 50
+prob_up    = 50
+risk       = "Moderate"
+health     = 50
 
 # Build JSON for ML models
 try:
@@ -619,18 +633,29 @@ You can see **why**, not just **what**. This makes the advice trustworthy and ed
     if not run_advisor:
         st.info(t("Enable 'Run AI Advisor' in the sidebar to see recommendations."))
     else:
-        with st.spinner(t("Training AI advisor model…")):
+        with st.spinner(t("Training AI advisor model...")):
             try:
-                advisor_model, feature_cols, accuracy = load_advisor(df_hash, df_json)
+                advisor_model, feature_cols, accuracy, advisor_err = load_advisor(df_hash, df_json)
             except Exception as e:
-                advisor_model, feature_cols, accuracy = None, [], 0
-                st.warning(t(f"Advisor model error: {e}"))
+                advisor_model, feature_cols, accuracy, advisor_err = None, [], 0, str(e)
 
-        if advisor_model is None or not feature_cols:
-            st.warning(
-                t("Not enough data to train the AI advisor. "
-                  "Select a longer date range (6+ months recommended).")
+        # Handle missing module clearly
+        if advisor_err == "MODULE_MISSING":
+            st.error(
+                t("**xai_advisor.py file is missing on the server.**") + "\n\n" +
+                t("This new file needs to be uploaded to GitHub. Steps:") + "\n"
+                "1. Go to your GitHub repo → `stock_sentinel/` folder\n"
+                "2. Click **Add file** → **Create new file**\n"
+                "3. Name it: `stock_sentinel/xai_advisor.py`\n"
+                "4. Paste the contents from your local `d:/Projects/stock/stock_sentinel/xai_advisor.py`\n"
+                "5. Commit — Streamlit will redeploy automatically"
             )
+        elif advisor_err:
+            st.warning(t(f"AI Advisor setup error: {advisor_err}"))
+
+        if not advisor_model or not feature_cols:
+            if not advisor_err:
+                st.warning(t("Not enough data to train the AI advisor. Select a longer date range (6+ months recommended)."))
         else:
             st.success(t(f"AI Advisor trained on {len(df)} days of data. Model accuracy: {accuracy}%"))
 
