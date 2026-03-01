@@ -138,28 +138,49 @@ def _fetch_newsapi(symbol: str, api_key: str, days_back: int = 30) -> list[dict]
 
 
 def _fetch_newsdata(symbol: str, api_key: str) -> list[dict]:
-    """NewsData.io headlines — fallback source."""
-    url = "https://newsdata.io/api/1/news"
+    """
+    NewsData.io headlines — fallback source.
+    Searches without category restriction to maximise results.
+    Tries the latest endpoint; falls back to archive endpoint if needed.
+    """
+    # Strip .KA / exchange suffix for cleaner search (e.g. "NBP.KA" → "NBP")
+    clean_sym = symbol.split(".")[0]
+    search_q  = f"{clean_sym} stock OR {clean_sym} shares"
+
+    url = "https://newsdata.io/api/1/latest"
     params = {
-        "apikey": api_key,
-        "q": f"{symbol} stock",
+        "apikey":   api_key,
+        "q":        search_q,
         "language": "en",
-        "category": "business",
+        # No 'category' filter — it was removing valid financial articles
     }
-    resp = requests.get(url, params=params, timeout=10)
-    resp.raise_for_status()
-    data = resp.json()
+    try:
+        resp = requests.get(url, params=params, timeout=12)
+        resp.raise_for_status()
+        data = resp.json()
+    except requests.HTTPError as e:
+        # 402 = payment required (free plan limit hit)
+        raise RuntimeError(f"NewsData.io HTTP {e.response.status_code}: {e}")
+    except Exception as e:
+        raise RuntimeError(f"NewsData.io request failed: {e}")
+
     if data.get("status") != "success":
-        raise RuntimeError(f"NewsData error: {data.get('message', 'unknown')}")
-    results = data.get("results", [])
-    return [
-        {
-            "date": (r.get("pubDate") or "")[:10],
-            "text": f"{r.get('title', '')} {r.get('description', '') or ''}".strip(),
-            "source": "newsdata",
-        }
-        for r in results if r.get("title")
-    ]
+        raise RuntimeError(f"NewsData.io API error: {data.get('message', data.get('results', 'unknown'))}")
+
+    results = data.get("results") or []
+    articles = []
+    for r in results:
+        title = r.get("title") or ""
+        desc  = r.get("description") or r.get("content") or ""
+        date  = (r.get("pubDate") or r.get("published_at") or "")[:10]
+        if title and date:
+            articles.append({
+                "date":   date,
+                "text":   f"{title} {desc}".strip(),
+                "source": "newsdata",
+            })
+    log.info(f"NewsData.io returned {len(articles)} articles for {symbol}")
+    return articles
 
 
 def get_news(symbol: str,
@@ -168,30 +189,38 @@ def get_news(symbol: str,
              source: str = NEWS_SOURCE) -> list[dict]:
     """
     Fetch news with dual-source resilience.
-    source='auto' → tries NewsAPI first; falls back to NewsData.io; then cached.
+    source='auto'  → tries NewsAPI; if it returns 0 articles OR fails,
+                     also tries NewsData.io; combines results.
+    source='newsapi'  → only NewsAPI
+    source='newsdata' → only NewsData.io
     """
-    # Try primary
+    all_articles: list[dict] = []
+
+    # ── NewsAPI ──────────────────────────────────────────────────────────
     if source in ("newsapi", "auto"):
-        if newsapi_key and newsapi_key != "YOUR_NEWSAPI_KEY":
+        if newsapi_key and newsapi_key not in ("", "YOUR_NEWSAPI_KEY"):
             try:
                 articles = _fetch_newsapi(symbol, newsapi_key)
-                log.info(f"NewsAPI returned {len(articles)} articles for {symbol}")
-                return articles
+                log.info(f"NewsAPI returned {len(articles)} articles for '{symbol}'")
+                all_articles.extend(articles)
             except Exception as e:
-                log.warning(f"NewsAPI failed ({e}) — trying fallback")
+                log.warning(f"NewsAPI failed for '{symbol}': {e}")
 
-    # Try NewsData.io fallback
-    if source in ("newsdata", "auto"):
-        if newsdata_key and newsdata_key != "YOUR_NEWSDATA_KEY":
+    # ── NewsData.io ───────────────────────────────────────────────────────
+    # Try if: (a) explicitly selected, OR (b) auto mode and NewsAPI gave 0
+    if source == "newsdata" or (source == "auto" and len(all_articles) == 0):
+        if newsdata_key and newsdata_key not in ("", "YOUR_NEWSDATA_KEY"):
             try:
                 articles = _fetch_newsdata(symbol, newsdata_key)
-                log.info(f"NewsData.io returned {len(articles)} articles for {symbol}")
-                return articles
+                log.info(f"NewsData.io returned {len(articles)} articles for '{symbol}'")
+                all_articles.extend(articles)
             except Exception as e:
-                log.warning(f"NewsData.io failed ({e}) — using cached sentiment")
+                log.warning(f"NewsData.io failed for '{symbol}': {e}")
 
-    log.warning(f"All news sources failed for {symbol}. Returning empty list.")
-    return []
+    if not all_articles:
+        log.warning(f"All news sources returned 0 articles for '{symbol}'.")
+    return all_articles
+
 
 
 # ─────────────────────────────────────────────
