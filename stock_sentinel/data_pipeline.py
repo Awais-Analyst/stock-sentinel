@@ -157,9 +157,11 @@ def _build_search_query(symbol: str) -> str:
 # NEWS DATA
 # ─────────────────────────────────────────────
 
-def _fetch_newsapi(symbol: str, api_key: str, days_back: int = 30) -> list[dict]:
+def _fetch_newsapi(symbol: str, api_key: str, days_back: int = 28) -> list[dict]:
     """NewsAPI.org headlines for the past `days_back` days.
-    Searches by company name, not ticker symbol."""
+    Searches by company name, not ticker symbol.
+    NOTE: Developer plan strictly limits to 1 month. Using 28 days avoids
+    errors in shorter months like February."""
     from_date  = (datetime.utcnow() - timedelta(days=days_back)).strftime("%Y-%m-%d")
     search_q   = _build_search_query(symbol)
     url = "https://newsapi.org/v2/everything"
