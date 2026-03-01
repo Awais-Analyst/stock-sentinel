@@ -84,29 +84,61 @@ def score_sentiment_detailed(texts: list[str]) -> dict:
 
 
 def add_sentiment_to_df(df: pd.DataFrame,
-                         texts_by_date: dict[str, list[str]]) -> pd.DataFrame:
+                         texts_by_date: dict) -> pd.DataFrame:
     """
     Add a 'sentiment' column to price DataFrame.
-    texts_by_date: {date_str → [raw text, ...]}
-    Dates with no text get the previous day's sentiment (ffill).
+    texts_by_date: {date_str: [raw text, ...]}
+
+    Uses string-based date matching (YYYY-MM-DD) to avoid timezone / precision
+    issues. Weekend/holiday articles are rolled back to nearest prior trading day.
     """
     df = df.copy()
     df["sentiment"] = 0.0
 
-    for date_str, texts in texts_by_date.items():
-        cleaned = [clean_text(t) for t in texts]
-        score   = score_sentiment(cleaned)
+    if not texts_by_date:
+        return df
+
+    # Build fast-lookup dict: "YYYY-MM-DD" -> actual DataFrame index value
+    date_to_idx = {str(idx)[:10]: idx for idx in df.index}
+
+    def _nearest_prior_trading_day(date_str):
+        """Return nearest prior trading day (up to 4 days back) or None."""
+        d = date_str[:10]
+        if d in date_to_idx:
+            return d
+        from datetime import datetime as _dt, timedelta as _td
         try:
-            idx = pd.Timestamp(date_str)
-            if idx in df.index:
-                df.at[idx, "sentiment"] = score
-        except Exception:
-            pass
+            dt = _dt.strptime(d, "%Y-%m-%d")
+        except ValueError:
+            return None
+        for i in range(1, 5):
+            candidate = (dt - _td(days=i)).strftime("%Y-%m-%d")
+            if candidate in date_to_idx:
+                return candidate
+        return None
+
+    # Accumulate texts per resolved trading day
+    trading_day_texts = {}
+    for date_str, texts in texts_by_date.items():
+        td = _nearest_prior_trading_day(str(date_str))
+        if td:
+            trading_day_texts.setdefault(td, []).extend(texts)
+
+    # Score and assign
+    matched = 0
+    for td_str, texts in trading_day_texts.items():
+        cleaned = [clean_text(t) for t in texts if isinstance(t, str) and t.strip()]
+        score   = score_sentiment(cleaned)
+        df.at[date_to_idx[td_str], "sentiment"] = score
+        matched += 1
+
+    log.info(f"Sentiment: {len(texts_by_date)} news dates, {matched} trading days matched. "
+             f"Range: [{df['sentiment'].min():.3f}, {df['sentiment'].max():.3f}]")
 
     df["sentiment"] = df["sentiment"].replace(0.0, np.nan)
     df["sentiment"] = df["sentiment"].ffill().fillna(0.0)
-    log.info(f"Sentiment column added. Range: [{df['sentiment'].min():.3f}, {df['sentiment'].max():.3f}]")
     return df
+
 
 
 # ─────────────────────────────────────────────
