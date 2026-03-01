@@ -443,6 +443,35 @@ with tab1:
 with tab2:
     st.subheader(t(f"{symbol} — News & Social Media Mood"))
 
+    # ── Explain the date split ──────────────────────────────────────────────
+    from datetime import datetime as _dt2, timedelta as _td2
+    news_to_date   = _dt2.utcnow().strftime("%b %d, %Y")
+    news_from_date = (_dt2.utcnow() - _td2(days=30)).strftime("%b %d, %Y")
+    user_range_old = end_date < (_dt2.utcnow() - _td2(days=30)).date()
+
+    with st.expander(f"📅 {t('Why are two different date ranges used?')} ← {t('Read this first')}"):
+        st.markdown(f"""
+**Price chart & forecast** → uses **your selected dates** ({start_date} to {end_date})
+> Historical stock data is freely available for any past period via Yahoo Finance.
+
+**News mood** → always uses the **last 30 days from today** ({news_from_date} → {news_to_date})
+> Free news APIs (NewsAPI.org, NewsData.io) only provide recent news — older articles require a paid subscription.
+
+**These do NOT conflict:**
+- You can select **2024/01/01 – 2026/12/31** and get: 2 years of price charts **+** last 30 days of news
+- The news chart will simply show the 30 most recent days, not your full price range
+        """)
+
+    # Warn if user's date range is completely in the past (outside news coverage)
+    if user_range_old:
+        st.warning(
+            f"⚠️ Your selected date range ends on **{end_date}**, which is more than 30 days ago. "
+            f"Free news APIs only cover **{news_from_date} → {news_to_date}** (last 30 days). "
+            f"News mood will show recent news only, not news from your selected price period."
+        )
+
+    st.info(f"📰 **News coverage: {news_from_date} → {news_to_date}** (last 30 days — free API limit)")
+
     with st.expander(f"💡 {t('What is News Mood?')}"):
         st.markdown(t("""
 We read news headlines and decide: is the tone **good** (positive) or **bad** (negative)?
@@ -450,35 +479,36 @@ Score: **-1.0** = very negative, **0** = neutral, **+1.0** = very positive.
 This sometimes predicts whether a stock will go up or down.
         """))
 
-    has_api_key   = bool(newsapi_key and newsapi_key not in ("", "YOUR_NEWSAPI_KEY"))
-    has_nd_key    = bool(newsdata_key and newsdata_key not in ("", "YOUR_NEWSDATA_KEY"))
-    has_any_key   = has_api_key or has_nd_key
-    has_sentiment = "sentiment" in df.columns and df["sentiment"].abs().max() > 0.001
+    has_api_key    = bool(newsapi_key and newsapi_key not in ("", "YOUR_NEWSAPI_KEY"))
+    has_nd_key     = bool(newsdata_key and newsdata_key not in ("", "YOUR_NEWSDATA_KEY"))
+    has_any_key    = has_api_key or has_nd_key
+    has_sentiment  = "sentiment" in df.columns and df["sentiment"].abs().max() > 0.001
     total_articles = sum(len(v) for v in cleaned_by_date.values()) if cleaned_by_date else 0
 
     if not has_sentiment:
         if not has_any_key:
             st.info(
-                "📰 **No news data — add a free API key to see News Mood.**\n\n"
+                "📰 **Add a free API key to see News Mood.**\n\n"
                 "1. Go to [newsapi.org](https://newsapi.org) → click **Get API Key** (free)\n"
                 "2. Paste the key in the **NewsAPI Key** field in the sidebar\n"
                 "3. Click **🔄 Refresh Data**"
             )
         elif total_articles == 0:
             st.warning(
-                f"⚠️ API key is set but the news API returned **0 articles** for '{symbol}'.\n\n"
-                "**Possible reasons:**\n"
-                "- Your key may not be activated yet (check your email for confirmation)\n"
-                "- The free plan is limited to the **last 30 days** of news\n"
-                "- Try a more common symbol like **AAPL** or **TSLA** to test\n\n"
-                "👉 Click **🔄 Refresh Data** after confirming the key is correct."
+                f"⚠️ API key is set but returned **0 articles** for '{symbol}'.\n\n"
+                "**Fix — try these steps:**\n"
+                "1. Check your email and **activate** your NewsAPI key\n"
+                "2. Free plan covers only **last 30 days** — your key must be active NOW\n"
+                "3. Try symbol **AAPL** or **TSLA** to verify the key works\n"
+                "4. Click **🔄 Refresh Data**\n\n"
+                f"*(News period being searched: {news_from_date} → {news_to_date})*"
             )
         else:
             st.warning(
-                f"⚠️ Got {total_articles} news articles but none matched trading dates. "
-                "Try clicking **🔄 Refresh Data** — this was likely a date-matching issue "
-                "that has now been fixed."
+                f"⚠️ Got {total_articles} news articles but dates didn't match trading days. "
+                "Click **🔄 Refresh Data** to retry with the fixed date matching."
             )
+
 
     else:
         try:
