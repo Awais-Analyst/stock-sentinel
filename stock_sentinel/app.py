@@ -364,7 +364,23 @@ with tab1:
 > Wider band = more uncertain prediction. This is only a model output, not a guarantee!
         """))
 
+    # ── Data quality warning for forecast ──────────────────────────────────
+    trading_days = len(df)
+    if trading_days < 60:
+        st.error(
+            f"⚠️ **Only {trading_days} trading days of data** — the AI forecast needs at least **60 days** (3 months) to work. "
+            f"The orange forecast line and golden confidence band will NOT appear. "
+            f"👉 **Fix:** Change the 'From' date to at least 3 months ago."
+        )
+    elif trading_days < 120:
+        st.warning(
+            f"⚠️ **Only {trading_days} trading days** selected. The forecast may be unreliable. "
+            f"For a full forecast with confidence bands, select **6+ months** of data. "
+            f"With short ranges, the AI doesn't have enough history to detect price patterns."
+        )
+
     horizon = st.slider(t("How many days to forecast?"), 7, 90, 30)
+
 
     with st.spinner(t("Running AI price forecast…")):
         try:
