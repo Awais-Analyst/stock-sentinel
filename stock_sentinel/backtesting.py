@@ -45,8 +45,12 @@ def generate_signals(df: pd.DataFrame,
 
     sentiment = df[sentiment_col] if sentiment_col in df.columns else pd.Series(0.0, index=df.index)
 
-    buy_mask  = (pred_return > pred_threshold)  & (sentiment > sentiment_threshold)
-    sell_mask = (pred_return < -pred_threshold) | (sentiment < -sentiment_threshold)
+    # For days where sentiment == 0.0 (no news), we only use pred_return.
+    # If news exists (abs(sentiment) > 0.001), it must agree with the trade.
+    has_news = sentiment.abs() > 0.001
+
+    buy_mask  = (pred_return > pred_threshold) & (~has_news | (sentiment > sentiment_threshold))
+    sell_mask = (pred_return < -pred_threshold) | (has_news & (sentiment < -sentiment_threshold))
 
     signals[buy_mask]  =  1
     signals[sell_mask] = -1
