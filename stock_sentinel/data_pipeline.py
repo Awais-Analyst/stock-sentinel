@@ -105,53 +105,37 @@ def get_stock_data(symbol: str, start: str, end: str,
     return pd.DataFrame()
 
 
-# ── Ticker → company name mapping for better news search ──────────────────
-# AAPL → "Apple" so search "Apple stock" not "AAPL stock" (news never writes tickers)
-_TICKER_TO_NAME: dict = {
-    "AAPL":    "Apple",
-    "MSFT":    "Microsoft",
-    "TSLA":    "Tesla",
-    "GOOGL":   "Google",
-    "GOOG":    "Google",
-    "AMZN":    "Amazon",
-    "META":    "Meta Facebook",
-    "NVDA":    "Nvidia",
-    "NFLX":    "Netflix",
-    "BRK.B":   "Berkshire Hathaway",
-    "JPM":     "JPMorgan",
-    "V":       "Visa",
-    "MA":      "Mastercard",
-    "JNJ":     "Johnson Johnson",
-    "WMT":     "Walmart",
-    "DIS":     "Disney",
-    "BABA":    "Alibaba",
-    "TSM":     "TSMC Taiwan Semiconductor",
-    "SAMSUNG": "Samsung",
-    # Pakistani stocks
-    "NBP.KA":   "National Bank Pakistan NBP",
-    "MCB.KA":   "MCB Bank Pakistan",
-    "HBL.KA":   "Habib Bank HBL Pakistan",
-    "UBL.KA":   "United Bank UBL Pakistan",
-    "OGDC.KA":  "Oil Gas Development Pakistan OGDC",
-    "PSO.KA":   "Pakistan State Oil PSO",
-    "ENGRO.KA": "Engro Corporation Pakistan",
-    "LUCK.KA":  "Lucky Cement Pakistan",
-    "HUBC.KA":  "Hub Power Pakistan",
-    "PPL.KA":   "Pakistan Petroleum PPL",
-}
+import yfinance as yf
 
 def _build_search_query(symbol: str) -> str:
     """
-    Build a news search query that uses the company name, not the ticker.
-    'AAPL' → 'Apple stock'  (not 'AAPL stock' which returns 0 results)
+    Build a news search query dynamically using the actual company name
+    from Yahoo Finance. Avoids pulling irrelevant news matching just the ticker (like "NBP").
     """
-    name = _TICKER_TO_NAME.get(symbol.upper())
-    if name:
-        return f'"{name}" stock OR "{name}" shares'
-    # Unknown ticker: strip exchange suffix and search both name and ticker
-    base = symbol.split(".")[0]
-    return f'"{base}" stock OR "{base}" shares'
+    try:
+        # Fetch actual company info from yfinance
+        ticker = yf.Ticker(symbol)
+        info = ticker.info
+        name = info.get('shortName') or info.get('longName')
+        
+        if name:
+            # Clean up suffixes like " Inc.", " Corp.", " Ltd.", " PLC" for broader matching
+            clean_name = name.replace(" Inc.", "").replace(" Corp.", "").replace(" Ltd.", "").replace(" PLC", "").strip()
+            # If it's a Pakistani stock, add Pakistan-specific keywords
+            if ".KA" in symbol.upper():
+                return f'"{clean_name}" OR ("{clean_name}" AND (pakistan OR karachi OR profit OR bank))'
+            # Standard company search
+            return f'"{clean_name}" AND (stock OR shares OR earnings)'
+            
+    except Exception as e:
+        log.warning(f"Could not fetch company name for {symbol} recursively: {e}")
 
+    # Fallback to the ticker symbol stripping the exchange suffix
+    base = symbol.split(".")[0]
+    if ".KA" in symbol.upper():
+        return f'"{base}" AND (pakistan OR karachi OR kse OR stock OR shares)'
+    
+    return f'"{base}" AND (stock OR shares OR earnings)'
 
 # ─────────────────────────────────────────────
 # NEWS DATA
@@ -198,9 +182,7 @@ def _fetch_newsdata(symbol: str, api_key: str) -> list[dict]:
     Searches without category restriction to maximise results.
     Tries the latest endpoint; falls back to archive endpoint if needed.
     """
-    # Strip .KA / exchange suffix for cleaner search (e.g. "NBP.KA" → "NBP")
-    clean_sym = symbol.split(".")[0]
-    search_q  = f"{clean_sym} stock OR {clean_sym} shares"
+    search_q = _build_search_query(symbol)
 
     url = "https://newsdata.io/api/1/latest"
     params = {
