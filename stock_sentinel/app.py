@@ -450,10 +450,36 @@ Score: **-1.0** = very negative, **0** = neutral, **+1.0** = very positive.
 This sometimes predicts whether a stock will go up or down.
         """))
 
+    has_api_key   = bool(newsapi_key and newsapi_key not in ("", "YOUR_NEWSAPI_KEY"))
+    has_nd_key    = bool(newsdata_key and newsdata_key not in ("", "YOUR_NEWSDATA_KEY"))
+    has_any_key   = has_api_key or has_nd_key
     has_sentiment = "sentiment" in df.columns and df["sentiment"].abs().max() > 0.001
+    total_articles = sum(len(v) for v in cleaned_by_date.values()) if cleaned_by_date else 0
 
     if not has_sentiment:
-        st.info(t("No news data available. Add a free API key from newsapi.org in the sidebar."))
+        if not has_any_key:
+            st.info(
+                "📰 **No news data — add a free API key to see News Mood.**\n\n"
+                "1. Go to [newsapi.org](https://newsapi.org) → click **Get API Key** (free)\n"
+                "2. Paste the key in the **NewsAPI Key** field in the sidebar\n"
+                "3. Click **🔄 Refresh Data**"
+            )
+        elif total_articles == 0:
+            st.warning(
+                f"⚠️ API key is set but the news API returned **0 articles** for '{symbol}'.\n\n"
+                "**Possible reasons:**\n"
+                "- Your key may not be activated yet (check your email for confirmation)\n"
+                "- The free plan is limited to the **last 30 days** of news\n"
+                "- Try a more common symbol like **AAPL** or **TSLA** to test\n\n"
+                "👉 Click **🔄 Refresh Data** after confirming the key is correct."
+            )
+        else:
+            st.warning(
+                f"⚠️ Got {total_articles} news articles but none matched trading dates. "
+                "Try clicking **🔄 Refresh Data** — this was likely a date-matching issue "
+                "that has now been fixed."
+            )
+
     else:
         try:
             fig_sent = plot_sentiment_bars(df["sentiment"], symbol=symbol)
