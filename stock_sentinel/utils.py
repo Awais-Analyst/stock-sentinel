@@ -173,45 +173,46 @@ def plot_sentiment_bars(sentiment_series: pd.Series, symbol: str = "") -> go.Fig
 
 def _apply_theme(fig: go.Figure, title: str = "") -> None:
     """
-    Adaptive chart theme — transparent background so the chart looks
-    correct on BOTH dark (Streamlit default) and white/light device themes.
-    Gridlines and text use neutral colours visible in both modes.
+    Adaptive chart theme — transparent chart area but SOLID WHITE legend box,
+    so legend text is readable on BOTH dark and light device backgrounds.
     """
     fig.update_layout(
-        title=dict(text=title, font=dict(size=17, color="#555555"), x=0),
-        # Transparent backgrounds — inherit the page background
+        title=dict(text=title, font=dict(size=17, color="#cccccc"), x=0),
+        # Transparent chart background — inherits page colour
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        # Neutral font readable on both dark and light
-        font=dict(color="#444444", family="Inter, Arial, sans-serif", size=13),
+        # Default font — overridden by legend below
+        font=dict(color="#dddddd", family="Inter, Arial, sans-serif", size=13),
+        # ── Legend: always solid white box so dark text is readable on any background
         legend=dict(
-            bgcolor="rgba(200,200,200,0.15)",
-            bordercolor="rgba(150,150,150,0.3)",
+            bgcolor="rgba(255,255,255,0.95)",   # solid white
+            bordercolor="rgba(100,100,100,0.4)",
             borderwidth=1,
-            font=dict(color="#333333"),
+            font=dict(color="#111111", size=12), # near-black text — readable on white box
         ),
         xaxis=dict(
-            gridcolor="rgba(150,150,150,0.25)",
-            zerolinecolor="rgba(150,150,150,0.4)",
-            tickfont=dict(color="#555555"),
-            title_font=dict(color="#555555"),
+            gridcolor="rgba(180,180,180,0.20)",
+            zerolinecolor="rgba(180,180,180,0.35)",
+            tickfont=dict(color="#aaaaaa"),
+            title_font=dict(color="#aaaaaa"),
             showgrid=True,
         ),
         yaxis=dict(
-            gridcolor="rgba(150,150,150,0.25)",
-            zerolinecolor="rgba(150,150,150,0.4)",
-            tickfont=dict(color="#555555"),
-            title_font=dict(color="#555555"),
+            gridcolor="rgba(180,180,180,0.20)",
+            zerolinecolor="rgba(180,180,180,0.35)",
+            tickfont=dict(color="#aaaaaa"),
+            title_font=dict(color="#aaaaaa"),
             showgrid=True,
         ),
         margin=dict(l=60, r=20, t=55, b=40),
         hovermode="x unified",
         hoverlabel=dict(
-            bgcolor="rgba(255,255,255,0.92)",
-            bordercolor="#cccccc",
-            font=dict(color="#222222", size=13),
+            bgcolor="rgba(255,255,255,0.95)",
+            bordercolor="#bbbbbb",
+            font=dict(color="#111111", size=13),
         ),
     )
+
 
 
 def generate_report_text(symbol: str, results: dict) -> str:
