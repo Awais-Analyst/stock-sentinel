@@ -275,11 +275,11 @@ except Exception:
 # QUICK SUMMARY CARD
 # ─────────────────────────────────────────
 price_change_pct = ((df["Close"].iloc[-1] - df["Close"].iloc[0]) / df["Close"].iloc[0]) * 100
-trend_label = ("📈 " + t("Going UP")) if price_change_pct >= 0 else ("📉 " + t("Going DOWN"))
+trend_label = ("📈 " + t("Up")) if price_change_pct >= 0 else ("📉 " + t("Down"))
 mean_sentiment = float(df["sentiment"].mean()) if "sentiment" in df.columns else 0.0
-if   mean_sentiment >  0.05: mood_label = "🟢 " + t("Positive news")
-elif mean_sentiment < -0.05: mood_label = "🔴 " + t("Negative news")
-else:                         mood_label = "⚪ " + t("Neutral news")
+if   mean_sentiment >  0.05: mood_label = "🟢 " + t("Positive")
+elif mean_sentiment < -0.05: mood_label = "🔴 " + t("Negative")
+else:                         mood_label = "⚪ " + t("Neutral")
 
 st.markdown(f"### {t('Quick Summary')}")
 s1, s2, s3, s4 = st.columns(4)
