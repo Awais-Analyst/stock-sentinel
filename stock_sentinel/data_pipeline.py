@@ -105,36 +105,89 @@ def get_stock_data(symbol: str, start: str, end: str,
     return pd.DataFrame()
 
 
+# ── Ticker → company name mapping for better news search ──────────────────
+# AAPL → "Apple" so search "Apple stock" not "AAPL stock" (news never writes tickers)
+_TICKER_TO_NAME: dict = {
+    "AAPL":    "Apple",
+    "MSFT":    "Microsoft",
+    "TSLA":    "Tesla",
+    "GOOGL":   "Google",
+    "GOOG":    "Google",
+    "AMZN":    "Amazon",
+    "META":    "Meta Facebook",
+    "NVDA":    "Nvidia",
+    "NFLX":    "Netflix",
+    "BRK.B":   "Berkshire Hathaway",
+    "JPM":     "JPMorgan",
+    "V":       "Visa",
+    "MA":      "Mastercard",
+    "JNJ":     "Johnson Johnson",
+    "WMT":     "Walmart",
+    "DIS":     "Disney",
+    "BABA":    "Alibaba",
+    "TSM":     "TSMC Taiwan Semiconductor",
+    "SAMSUNG": "Samsung",
+    # Pakistani stocks
+    "NBP.KA":   "National Bank Pakistan NBP",
+    "MCB.KA":   "MCB Bank Pakistan",
+    "HBL.KA":   "Habib Bank HBL Pakistan",
+    "UBL.KA":   "United Bank UBL Pakistan",
+    "OGDC.KA":  "Oil Gas Development Pakistan OGDC",
+    "PSO.KA":   "Pakistan State Oil PSO",
+    "ENGRO.KA": "Engro Corporation Pakistan",
+    "LUCK.KA":  "Lucky Cement Pakistan",
+    "HUBC.KA":  "Hub Power Pakistan",
+    "PPL.KA":   "Pakistan Petroleum PPL",
+}
+
+def _build_search_query(symbol: str) -> str:
+    """
+    Build a news search query that uses the company name, not the ticker.
+    'AAPL' → 'Apple stock'  (not 'AAPL stock' which returns 0 results)
+    """
+    name = _TICKER_TO_NAME.get(symbol.upper())
+    if name:
+        return f'"{name}" stock OR "{name}" shares'
+    # Unknown ticker: strip exchange suffix and search both name and ticker
+    base = symbol.split(".")[0]
+    return f'"{base}" stock OR "{base}" shares'
+
+
 # ─────────────────────────────────────────────
 # NEWS DATA
 # ─────────────────────────────────────────────
 
 def _fetch_newsapi(symbol: str, api_key: str, days_back: int = 30) -> list[dict]:
-    """NewsAPI.org headlines for the past `days_back` days."""
-    from_date = (datetime.utcnow() - timedelta(days=days_back)).strftime("%Y-%m-%d")
+    """NewsAPI.org headlines for the past `days_back` days.
+    Searches by company name, not ticker symbol."""
+    from_date  = (datetime.utcnow() - timedelta(days=days_back)).strftime("%Y-%m-%d")
+    search_q   = _build_search_query(symbol)
     url = "https://newsapi.org/v2/everything"
     params = {
-        "q": f"{symbol} stock",
-        "from": from_date,
-        "sortBy": "publishedAt",
+        "q":        search_q,
+        "from":     from_date,
+        "sortBy":   "publishedAt",
         "language": "en",
-        "pageSize": 50,
-        "apiKey": api_key,
+        "pageSize": 100,
+        "apiKey":   api_key,
     }
+    log.info(f"NewsAPI query for {symbol}: {search_q}")
     resp = requests.get(url, params=params, timeout=10)
     resp.raise_for_status()
     data = resp.json()
     if data.get("status") != "ok":
         raise RuntimeError(f"NewsAPI error: {data.get('message', 'unknown')}")
     articles = data.get("articles", [])
+    log.info(f"NewsAPI returned {len(articles)} raw articles for {symbol}")
     return [
         {
-            "date": a.get("publishedAt", "")[:10],
-            "text": f"{a.get('title', '')} {a.get('description', '')}".strip(),
+            "date":   (a.get("publishedAt") or "")[:10],
+            "text":   f"{a.get('title', '')} {a.get('description') or ''}".strip(),
             "source": "newsapi",
         }
         for a in articles if a.get("title")
     ]
+
 
 
 def _fetch_newsdata(symbol: str, api_key: str) -> list[dict]:
