@@ -26,8 +26,8 @@ NEWS_SOURCE = os.getenv("NEWS_SOURCE", "auto")
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 
-DEFAULT_START = "2023-01-01"
-DEFAULT_END   = "2024-12-31"
+DEFAULT_START = (pd.Timestamp.now() - pd.DateOffset(months=6)).strftime("%Y-%m-%d")
+DEFAULT_END   = pd.Timestamp.now().strftime("%Y-%m-%d")
 COMMISSION    = 0.001   # 0.1% per trade
 INITIAL_CAPITAL = 10_000
 
