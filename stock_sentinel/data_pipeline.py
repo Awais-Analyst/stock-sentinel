@@ -105,8 +105,6 @@ def get_stock_data(symbol: str, start: str, end: str,
     return pd.DataFrame()
 
 
-import yfinance as yf
-import re
 
 # ── Dynamic company name lookup (cached) ─────────────────────────────────
 _company_name_cache: dict = {}
