@@ -129,22 +129,34 @@ def get_shap_explanation(model, df: pd.DataFrame, feature_cols: list) -> dict:
             return {}
 
         explainer = shap.TreeExplainer(model)
-        # Use last 100 rows for background, explain the latest row
-        background = feat_df.tail(100)
         latest     = feat_df.tail(1)
 
         shap_values = explainer.shap_values(latest)
 
-        # shap_values shape: [n_classes, n_samples, n_features]
-        # Class 1 = BUY direction
+        # Handle all possible SHAP output shapes:
+        # 1) List of arrays (older shap): [class0_array, class1_array]
+        # 2) 3D numpy array (newer shap): shape (n_classes, n_samples, n_features)
+        # 3) 2D numpy array: shape (n_samples, n_features)
         if isinstance(shap_values, list):
-            sv = shap_values[1][0]   # class 1, first (only) sample
+            # List format: pick class 1 (BUY direction), first sample
+            sv = np.array(shap_values[1]).flatten()[:len(feature_cols)]
+        elif isinstance(shap_values, np.ndarray):
+            if shap_values.ndim == 3:
+                # 3D array: [n_classes, n_samples, n_features] → class 1, sample 0
+                sv = shap_values[1, 0, :]
+            elif shap_values.ndim == 2:
+                # 2D array: [n_samples, n_features] → sample 0
+                sv = shap_values[0, :]
+            elif shap_values.ndim == 1:
+                sv = shap_values
+            else:
+                sv = shap_values.flatten()[:len(feature_cols)]
         else:
-            sv = shap_values[0]
+            sv = np.array(shap_values).flatten()[:len(feature_cols)]
 
         result = {
-            FEATURE_LABELS.get(col, col): float(val)
-            for col, val in zip(feature_cols, sv)
+            FEATURE_LABELS.get(col, col): float(v)
+            for col, v in zip(feature_cols, sv)
         }
         # Sort by absolute importance
         result = dict(sorted(result.items(), key=lambda x: abs(x[1]), reverse=True))
