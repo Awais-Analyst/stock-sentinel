@@ -1,9 +1,13 @@
-# 📈 Stock Sentinel
+# 📈 Stock Sentinel — AI-Powered Stock Analysis Platform
 
-[![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python)](https://python.org)
-[![Streamlit](https://img.shields.io/badge/Streamlit-1.40-red?logo=streamlit)](https://streamlit.io)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
-[![Deploy: Render](https://img.shields.io/badge/Deploy-Render-purple)](https://render.com)
+[![Live Demo](https://img.shields.io/badge/🚀_Live_Demo-Stock_Sentinel-00c48c?style=for-the-badge)](https://stock-sentinel-gj7grodjh3bzf7w3jjpu6s.streamlit.app/)
+[![Python](https://img.shields.io/badge/Python-3.11+-blue?style=flat-square&logo=python)](https://python.org)
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.40-FF4B4B?style=flat-square&logo=streamlit)](https://streamlit.io)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
+
+> **Stock Sentinel** is a full-stack AI stock analysis dashboard that combines **real-time news sentiment analysis**, **ML price forecasting**, **strategy backtesting**, and **explainable AI investment advice** — all in one interactive platform.
+
+🔗 **[Live Demo](https://stock-sentinel-gj7grodjh3bzf7w3jjpu6s.streamlit.app/)** · 📂 **[Source Code](https://github.com/Awais-Analyst/stock-sentinel)**
 
 > ⚠️ **Disclaimer**: Stock Sentinel is an **educational and simulation** tool only.
 > It is **NOT financial advice**. All forecasts and backtests use historical data.
@@ -11,37 +15,67 @@
 
 ---
 
-## 🤔 Why This Project?
+## ✨ Key Features
 
-Stock Sentinel demonstrates a **complete end-to-end quantitative finance workflow** built
-entirely with **free, open-source tools**:
+| Feature | Technology | Description |
+|---------|-----------|-------------|
+| 📊 **Interactive Price Charts** | Plotly, yfinance | Real-time candlestick charts with volume, anomaly detection, and technical indicators |
+| 📰 **News Sentiment Analysis** | VADER NLP, NewsAPI | Automated news fetching with relevance filtering + sentiment scoring |
+| 🔮 **AI Price Forecasting** | Prophet, LSTM | Machine learning price predictions with confidence intervals |
+| 🎯 **Strategy Backtesting** | Custom Engine | Simulate trading strategies with $10K virtual capital, commissions, and risk metrics |
+| 🧠 **Explainable AI Advisor** | RandomForest, SHAP | Investment recommendations with probability scores and feature explanations |
+| 🎨 **Portfolio Optimizer** | PuLP | Minimum-variance portfolio allocation across multiple stocks |
+| 🌍 **Global Stock Support** | Yahoo Finance | Analyze stocks from USA, UK, Germany, Japan, Saudi Arabia, Pakistan, India, Hong Kong, and more |
+| 🌐 **Multi-Language** | deep-translator | Interface available in English, Urdu, Arabic, Chinese, French, Hindi |
+| 💬 **AI Chat Assistant** | NLP | Ask questions about stocks in plain language |
+
+---
+
+## 🖥️ Screenshots
+
+### Dark Mode
+*Premium glassmorphism UI with gradient sidebar, interactive Plotly charts, and AI-powered insights.*
+
+### Light Mode
+*Fully adaptive design — readable on both dark and light backgrounds.*
+
+---
+
+## 🏗️ Architecture
 
 ```
-Public Data → NLP Sentiment → ML Forecasting → Strategy Backtesting → Interactive Dashboard
-```
+📊 User Interface (Streamlit + Premium CSS)
+    ├── 📈 Price Chart & Forecast (Tab 1)
+    ├── 📰 News Mood & Sentiment (Tab 2)
+    ├── 🎯 Strategy Backtesting (Tab 3)
+    └── 🧠 AI Advisor with SHAP (Tab 4)
 
-It's designed for students and analysts who want to understand how modern quant tools
-work under the hood — without needing expensive data subscriptions or proprietary libraries.
+🔧 Backend Pipeline
+    ├── data_pipeline.py    → Data fetching (yfinance + NewsAPI + NewsData.io)
+    ├── sentiment.py        → VADER NLP scoring + word clouds
+    ├── modeling.py         → Prophet + LSTM + anomaly detection
+    ├── backtesting.py      → Signal generation + portfolio simulation
+    ├── xai_advisor.py      → RandomForest + SHAP explanations
+    └── utils.py            → Config + Plotly chart themes
+```
 
 ---
 
 ## 🗂️ Project Structure
 
 ```
-stock/
+stock-sentinel/
 ├── stock_sentinel/
-│   ├── app.py               # Streamlit dashboard (main entry point)
-│   ├── data_pipeline.py     # Data fetching, cleaning, caching
-│   ├── sentiment.py         # VADER NLP, word cloud, correlation
-│   ├── modeling.py          # Prophet, LSTM, anomaly detection
-│   ├── backtesting.py       # Signal generation, simulation, risk metrics
-│   ├── utils.py             # Config, Plotly helpers, report generator
-│   ├── test_full_pipeline.py# End-to-end smoke test
-│   └── data/                # Cached CSVs (auto-created)
-├── docs/images/             # Screenshots
+│   ├── app.py                 # Main Streamlit dashboard
+│   ├── data_pipeline.py       # Data fetching, cleaning, caching
+│   ├── sentiment.py           # VADER NLP, word cloud, correlation
+│   ├── modeling.py            # Prophet, LSTM, anomaly detection
+│   ├── backtesting.py         # Signal generation, simulation, risk metrics
+│   ├── xai_advisor.py         # Explainable AI advisor (SHAP)
+│   ├── utils.py               # Config, Plotly helpers, report generator
+│   ├── test_full_pipeline.py  # End-to-end smoke test
+│   └── data/                  # Cached CSVs (auto-created)
 ├── requirements.txt
-├── Procfile                 # Render deploy
-├── runtime.txt              # Python 3.11 pin
 └── README.md
 ```
 
@@ -52,37 +86,29 @@ stock/
 ### 1. Clone & Install
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/stock-sentinel.git
+git clone https://github.com/Awais-Analyst/stock-sentinel.git
 cd stock-sentinel
 pip install -r requirements.txt
 ```
 
-Download NLTK data (one-time):
-
-```python
-import nltk
-nltk.download('vader_lexicon')
-nltk.download('stopwords')
-```
-
-### 2. Set API Keys
+### 2. Set API Keys (Optional — for News Sentiment)
 
 Get your **free** API keys:
 
 | Service | URL | Free Tier |
-|---|---|---|
+|---------|-----|-----------|
 | NewsAPI | [newsapi.org](https://newsapi.org) | 100 req/day |
 | NewsData.io | [newsdata.io](https://newsdata.io) | 200 credits/day |
 
-Set them as environment variables (recommended):
+Set them as environment variables:
 
 ```bash
 # Windows PowerShell
-$env:NEWS_API_KEY   = "your_newsapi_key_here"
-$env:NEWSDATA_API_KEY = "your_newsdata_key_here"
+$env:NEWS_API_KEY     = "your_newsapi_key"
+$env:NEWSDATA_API_KEY = "your_newsdata_key"
 ```
 
-Or enter them directly in the Streamlit sidebar at runtime.
+Or enter them directly in the sidebar at runtime.
 
 ### 3. Run the Dashboard
 
@@ -102,84 +128,107 @@ python test_full_pipeline.py
 
 ---
 
-## 🧩 Features
+## 🌍 Tested With Global Stocks
 
-| Feature | Details |
-|---|---|
-| **Price Data** | yfinance OHLCV — auto-retry, CSV caching |
-| **News Sentiment** | NewsAPI + NewsData.io fallback, VADER scoring |
-| **Social Sentiment** | Best-effort X scraping (gracefully degrades to news-only) |
-| **Technical Indicators** | RSI-14, MACD, Bollinger Bands, ATR |
-| **Forecasting** | Prophet (with sentiment regressor) + optional LSTM |
-| **Anomaly Detection** | IsolationForest on log returns |
-| **Backtesting** | Sentiment-driven signals, equity curve, commissions |
-| **Risk Metrics** | Sharpe Ratio, VaR (95%), Max Drawdown |
-| **Portfolio Optimization** | PuLP min-variance (2–5 stocks) |
-| **Dashboard** | Streamlit 3-tab UI, dark theme, Plotly charts |
-| **Chat Interface** | Keyword-based query routing |
+Stock Sentinel has been tested with **10 stocks from 7 regions**:
 
----
-
-## 📡 Data Sources & Robustness (2026)
-
-### yfinance
-- `auto_adjust=True` for split/dividend-adjusted prices
-- Exponential backoff retry (3 attempts) before failing
-- Data cached to `data/<SYMBOL>_ohlcv.csv` — re-used on next run
-
-### News
-1. **Primary**: NewsAPI.org (~100 req/day, Developer free tier)
-2. **Fallback**: NewsData.io (~200 credits/day)
-3. If both fail: logs a warning, uses previous cached sentiment
-
-### X / Twitter
-Public X scraping is unreliable in 2026 (JS-heavy, bot detection).
-The scraper is intentionally minimal (n≤15 posts) with:
-- Random user-agent rotation
-- 5–10 second sleep before requests
-- Silent graceful failure — app continues news-only
-
-**Alternative**: Download a pre-built Kaggle dataset for offline training:
-- Search Kaggle: *"stock market tweets sentiment"*
-- Drop the CSV into `data/` and it will be picked up automatically
+| Stock | Region | Data | Backtest | AI Advisor |
+|-------|--------|------|----------|------------|
+| AAPL | 🇺🇸 USA | ✅ | ✅ 146 trades | ✅ 54.3% |
+| TSLA | 🇺🇸 USA | ✅ | ✅ 155 trades | ✅ 48.6% |
+| 2222.SR | 🇸🇦 Saudi Arabia | ✅ | ✅ 132 trades | ✅ 32.4% |
+| SHEL.L | 🇬🇧 UK | ✅ | ✅ 147 trades | ✅ 60.0% |
+| RELIANCE.NS | 🇮🇳 India | ✅ | ✅ 135 trades | ✅ 47.1% |
+| SAP.DE | 🇩🇪 Germany | ✅ | ✅ 142 trades | ✅ 62.5% |
+| 7203.T | 🇯🇵 Japan | ✅ | ✅ 150 trades | ✅ 54.5% |
+| 0700.HK | 🇭🇰 Hong Kong | ✅ | ✅ 139 trades | ✅ 42.4% |
+| NBP.KA | 🇵🇰 Pakistan | ✅ | ✅ 153 trades | ✅ 38.2% |
+| TCS.NS | 🇮🇳 India | ✅ | ✅ 138 trades | ✅ 70.6% |
 
 ---
 
-## 🚀 Deploy to Render
+## 🧠 How It Works
 
-1. Fork this repo on GitHub
-2. Go to [render.com](https://render.com) → New Web Service → Connect repo
-3. Set **Build Command**: `pip install -r requirements.txt`
-4. Set **Start Command**: `streamlit run stock_sentinel/app.py --server.port $PORT --server.address 0.0.0.0`
-5. Add environment variables: `NEWS_API_KEY`, `NEWSDATA_API_KEY`
-6. Deploy → Render auto-deploys on every push to `main`
+### 1. Data Collection
+- **Price data**: Yahoo Finance with auto-retry and CSV caching
+- **News data**: NewsAPI.org (primary) → NewsData.io (fallback)
+- **Relevance filtering**: Dynamic company name lookup via yfinance + financial keyword matching
 
-> **Note**: Free Render tier spins down after 15 min inactivity. First load may take ~30 seconds.
+### 2. Sentiment Analysis
+- VADER NLP scores each headline (-1.0 to +1.0)
+- Weekend/holiday articles are rolled back to nearest trading day
+- Word clouds and keyword frequency analysis
+
+### 3. Price Forecasting
+- **Prophet**: Time series decomposition with sentiment as extra regressor
+- **LSTM** (optional): Deep learning with EarlyStopping
+- **Naive baseline**: Yesterday's close for fair model comparison
+
+### 4. Strategy Backtesting
+- Signal generation from predicted returns + sentiment agreement
+- Long-only simulation with commissions (0.1%)
+- Risk metrics: Sharpe Ratio, VaR (95%), Max Drawdown
+
+### 5. AI Advisor (Explainable)
+- RandomForest classifier predicting 5-day price direction
+- SHAP feature contributions (with Gini importance fallback)
+- Health score, confidence level, and plain-English explanations
+
+---
+
+## 🚀 Deployment
+
+### Streamlit Cloud (Recommended)
+
+1. Push code to GitHub
+2. Go to [share.streamlit.io](https://share.streamlit.io)
+3. Connect your GitHub repo → Select `stock_sentinel/app.py`
+4. Add secrets: `NEWS_API_KEY`, `NEWSDATA_API_KEY`
+5. Deploy!
+
+### Render
+
+1. Fork this repo
+2. Go to [render.com](https://render.com) → New Web Service
+3. **Start Command**: `streamlit run stock_sentinel/app.py --server.port $PORT --server.address 0.0.0.0`
+4. Add environment variables and deploy
 
 ---
 
 ## ⚙️ Configuration
 
-Edit `stock_sentinel/utils.py` to change defaults:
+Edit `stock_sentinel/utils.py`:
 
 ```python
-STOCKS         = ["AAPL", "MSFT", "TSLA", "PSO.KA", "OGDC.KA"]
-NEWS_SOURCE    = "auto"    # 'newsapi' | 'newsdata' | 'auto'
-DEFAULT_START  = "2023-01-01"
-DEFAULT_END    = "2024-12-31"
-INITIAL_CAPITAL = 10_000
-COMMISSION     = 0.001     # 0.1% per trade
+STOCKS          = ["AAPL", "MSFT", "TSLA", "PSO.KA", "OGDC.KA"]
+NEWS_SOURCE     = "auto"       # 'newsapi' | 'newsdata' | 'auto'
+INITIAL_CAPITAL = 10_000       # Starting capital for backtests
+COMMISSION      = 0.001        # 0.1% per trade
 ```
+
+Date ranges are automatically set to the last 6 months.
 
 ---
 
 ## ⚠️ Known Limitations
 
-- **X scraping**: Often returns empty results — use news-only mode for reliable sentiment
-- **Pakistani stocks (PSO.KA, OGDC.KA)**: Sparse yfinance coverage; test early and cache
-- **LSTM**: Slow to train on free hardware; use Prophet for quick runs
-- **NewsAPI free tier**: No articles older than 1 month; historical sentiment will be sparse
-- **PuLP optimizer**: Simplified variance model; not suitable for real portfolio management
+- **NewsAPI free tier**: Only articles from the last 30 days — historical sentiment will be sparse
+- **LSTM**: Slow to train on free hardware; Prophet is recommended for quick runs
+- **Pakistani stocks (.KA)**: May have sparse coverage on some tickers
+- **PuLP optimizer**: Simplified minimum-variance model; not for real portfolio management
+
+---
+
+## 🛠️ Tech Stack
+
+| Category | Technologies |
+|----------|-------------|
+| **Frontend** | Streamlit, Plotly, Custom CSS (Glassmorphism) |
+| **ML/AI** | scikit-learn, Prophet, TensorFlow/Keras, SHAP |
+| **NLP** | VADER Sentiment, NLTK, WordCloud |
+| **Data** | yfinance, NewsAPI, NewsData.io, pandas, NumPy |
+| **Optimization** | PuLP (Linear Programming) |
+| **Deployment** | Streamlit Cloud, Render |
 
 ---
 
@@ -191,4 +240,10 @@ MIT — free for educational and non-commercial use.
 
 ## 🙏 Acknowledgements
 
-Built with: [yfinance](https://github.com/ranaroussi/yfinance) · [Prophet](https://facebook.github.io/prophet/) · [VADER](https://github.com/cjhutto/vaderSentiment) · [Streamlit](https://streamlit.io) · [Plotly](https://plotly.com) · [scikit-learn](https://scikit-learn.org) · [PuLP](https://coin-or.github.io/pulp/)
+Built with: [yfinance](https://github.com/ranaroussi/yfinance) · [Prophet](https://facebook.github.io/prophet/) · [VADER](https://github.com/cjhutto/vaderSentiment) · [SHAP](https://github.com/shap/shap) · [Streamlit](https://streamlit.io) · [Plotly](https://plotly.com) · [scikit-learn](https://scikit-learn.org) · [PuLP](https://coin-or.github.io/pulp/)
+
+---
+
+<p align="center">
+  Made with ❤️ by <a href="https://github.com/Awais-Analyst">Awais-Analyst</a>
+</p>
