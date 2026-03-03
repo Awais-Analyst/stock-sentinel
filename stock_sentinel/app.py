@@ -23,6 +23,202 @@ st.set_page_config(
 )
 
 # ─────────────────────────────────────────
+# PREMIUM CSS — Dark/Light Mode Compatible
+# ─────────────────────────────────────────
+st.markdown("""
+<style>
+/* ── Google Fonts ── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* ── Root variables (light mode) ── */
+:root {
+    --accent: #00c48c;
+    --accent-hover: #00d89a;
+    --accent-glow: rgba(0, 196, 140, 0.18);
+    --danger: #e84545;
+    --warning: #f5a623;
+    --card-bg: rgba(255, 255, 255, 0.7);
+    --card-border: rgba(0, 0, 0, 0.06);
+    --card-shadow: 0 2px 16px rgba(0, 0, 0, 0.06);
+    --text-primary: #1a1a2e;
+    --text-secondary: #555;
+    --tab-bg: rgba(0, 196, 140, 0.06);
+    --divider-color: rgba(0, 0, 0, 0.06);
+}
+
+/* ── Dark mode overrides ── */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --card-bg: rgba(30, 30, 46, 0.65);
+        --card-border: rgba(255, 255, 255, 0.08);
+        --card-shadow: 0 2px 20px rgba(0, 0, 0, 0.3);
+        --text-primary: #e6e6e6;
+        --text-secondary: #aaa;
+        --tab-bg: rgba(0, 196, 140, 0.08);
+        --divider-color: rgba(255, 255, 255, 0.06);
+    }
+}
+
+/* Streamlit dark theme detection */
+[data-testid="stAppViewContainer"][style*="background-color: rgb(14"] {
+    --card-bg: rgba(30, 30, 46, 0.65);
+    --card-border: rgba(255, 255, 255, 0.08);
+    --card-shadow: 0 2px 20px rgba(0, 0, 0, 0.3);
+    --text-primary: #e6e6e6;
+    --text-secondary: #aaa;
+    --tab-bg: rgba(0, 196, 140, 0.08);
+    --divider-color: rgba(255, 255, 255, 0.06);
+}
+
+/* ── Base Font ── */
+html, body, [class*="css"] {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+}
+
+/* ── Header gradient ── */
+[data-testid="stHeader"] {
+    background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%) !important;
+    backdrop-filter: blur(12px);
+}
+
+/* ── Sidebar polish ── */
+[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #0f2027 0%, #1a3a4a 60%, #203a43 100%) !important;
+}
+[data-testid="stSidebar"] * {
+    color: #e0e8ef !important;
+}
+[data-testid="stSidebar"] .stTextInput input,
+[data-testid="stSidebar"] .stSelectbox select {
+    background: rgba(255,255,255,0.08) !important;
+    border: 1px solid rgba(255,255,255,0.15) !important;
+    border-radius: 8px !important;
+    color: #fff !important;
+}
+[data-testid="stSidebar"] .stButton > button {
+    background: linear-gradient(135deg, #00c48c, #00d89a) !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 10px !important;
+    font-weight: 600 !important;
+    transition: all 0.3s ease !important;
+    box-shadow: 0 4px 15px rgba(0, 196, 140, 0.3) !important;
+}
+[data-testid="stSidebar"] .stButton > button:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 6px 20px rgba(0, 196, 140, 0.45) !important;
+}
+
+/* ── Metric cards (glassmorphism) ── */
+[data-testid="stMetric"] {
+    background: var(--card-bg) !important;
+    backdrop-filter: blur(10px) !important;
+    border: 1px solid var(--card-border) !important;
+    border-radius: 14px !important;
+    padding: 18px 20px !important;
+    box-shadow: var(--card-shadow) !important;
+    transition: transform 0.25s ease, box-shadow 0.25s ease !important;
+}
+[data-testid="stMetric"]:hover {
+    transform: translateY(-3px) !important;
+    box-shadow: 0 8px 30px rgba(0, 196, 140, 0.12) !important;
+}
+[data-testid="stMetricLabel"] {
+    font-size: 0.78rem !important;
+    font-weight: 500 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.6px !important;
+    color: var(--text-secondary) !important;
+}
+[data-testid="stMetricValue"] {
+    font-weight: 700 !important;
+    font-size: 1.5rem !important;
+    color: var(--text-primary) !important;
+}
+
+/* ── Tab styling ── */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 8px;
+    background: transparent;
+}
+.stTabs [data-baseweb="tab"] {
+    background: var(--tab-bg) !important;
+    border-radius: 10px 10px 0 0 !important;
+    padding: 10px 20px !important;
+    font-weight: 500 !important;
+    border: 1px solid transparent !important;
+    transition: all 0.3s ease !important;
+}
+.stTabs [data-baseweb="tab"]:hover {
+    background: rgba(0, 196, 140, 0.12) !important;
+}
+.stTabs [aria-selected="true"] {
+    background: var(--accent-glow) !important;
+    border-bottom: 3px solid var(--accent) !important;
+    font-weight: 600 !important;
+}
+
+/* ── Expander cards ── */
+.streamlit-expanderHeader {
+    font-weight: 500 !important;
+    border-radius: 10px !important;
+}
+[data-testid="stExpander"] {
+    border: 1px solid var(--card-border) !important;
+    border-radius: 12px !important;
+    overflow: hidden;
+}
+
+/* ── Buttons ── */
+.stButton > button {
+    border-radius: 10px !important;
+    font-weight: 500 !important;
+    transition: all 0.25s ease !important;
+}
+
+/* ── Info/Warning/Error boxes ── */
+[data-testid="stAlert"] {
+    border-radius: 10px !important;
+    border-left-width: 4px !important;
+}
+
+/* ── DataFrames ── */
+[data-testid="stDataFrame"] {
+    border-radius: 12px !important;
+    overflow: hidden !important;
+}
+
+/* ── Divider ── */
+hr {
+    border-color: var(--divider-color) !important;
+}
+
+/* ── Smooth scroll ── */
+html { scroll-behavior: smooth; }
+
+/* ── Plotly chart container ── */
+.js-plotly-plot {
+    border-radius: 12px !important;
+    overflow: hidden;
+}
+
+/* ── Code blocks ── */
+code, pre {
+    font-family: 'JetBrains Mono', monospace !important;
+}
+
+/* ── Fade-in animation ── */
+[data-testid="stAppViewContainer"] > div:first-child {
+    animation: fadeIn 0.4s ease-out;
+}
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ─────────────────────────────────────────
 # LANGUAGE / TRANSLATION SYSTEM
 # ─────────────────────────────────────────
 LANG_OPTIONS = {
@@ -93,10 +289,21 @@ with st.sidebar:
     ).upper().strip()
 
     col1, col2 = st.columns(2)
+    today = pd.Timestamp.now().normalize().date()
     with col1:
-        start_date = st.date_input(t("From"), value=pd.to_datetime(DEFAULT_START))
+        start_date = st.date_input(t("From"), value=pd.to_datetime(DEFAULT_START),
+                                    max_value=today)
     with col2:
-        end_date = st.date_input(t("To"), value=pd.to_datetime(DEFAULT_END))
+        end_date = st.date_input(t("To"), value=pd.to_datetime(DEFAULT_END),
+                                  max_value=today)
+
+    # Clamp future dates to today
+    if end_date > today:
+        end_date = today
+        st.warning(t(f"'To' date was in the future. Adjusted to today ({today})."))
+    if start_date > today:
+        start_date = today - pd.Timedelta(days=180)
+        st.warning(t(f"'From' date was in the future. Adjusted to {start_date}."))
 
     if start_date >= end_date:
         st.error(t("'From' date must be before 'To' date."))
@@ -189,11 +396,16 @@ def load_advisor(df_hash, df_json):
     try:
         from xai_advisor import train_advisor_model
     except ImportError:
-        # xai_advisor.py not found on the server — tell the user exactly what to do
         return None, [], 0, "MODULE_MISSING"
     try:
         df = pd.read_json(io.StringIO(df_json))
         df.index = pd.to_datetime(df.index)
+        # Ensure technical indicators exist (they may be missing if df_json was minimal)
+        if "Close" in df.columns and "rsi_14" not in df.columns:
+            from modeling import add_technical_indicators, add_lag_features
+            df = add_technical_indicators(df)
+            df = add_lag_features(df)
+            df.dropna(inplace=True)
         model, cols, acc = train_advisor_model(df)
         return model, cols, acc, None
     except Exception as e:
@@ -261,10 +473,11 @@ prob_up    = 50
 risk       = "Moderate"
 health     = 50
 
-# Build JSON for ML models
+# Build JSON for ML models — include ALL numeric columns so that
+# the AI advisor can find technical indicators (rsi_14, macd, etc.)
 try:
-    df_cols = [c for c in ["Open","High","Low","Close","Volume","sentiment"] if c in df.columns]
-    df_json = df[df_cols].to_json()
+    numeric_df = df.select_dtypes(include="number")
+    df_json = numeric_df.to_json()
     df_hash = hash(df_json[:500])
 except Exception:
     df_json = df[["Close"]].to_json()
@@ -759,7 +972,12 @@ You can see **why**, not just **what**. This makes the advice trustworthy and ed
 
         if not advisor_model or not feature_cols:
             if not advisor_err:
-                st.warning(t("Not enough data to train the AI advisor. Select a longer date range (6+ months recommended)."))
+                n_rows = len(df) if df is not None else 0
+                st.warning(
+                    t(f"AI Advisor could not be trained ({n_rows} data rows available, "
+                      f"need 50+ with valid indicators). "
+                      f"Try a different stock symbol or a longer date range.")
+                )
         else:
             st.success(t(f"AI Advisor trained on {len(df)} days of data. Model accuracy: {accuracy}%"))
 
@@ -863,25 +1081,37 @@ You can see **why**, not just **what**. This makes the advice trustworthy and ed
                     """))
 
                 try:
-                    shap_vals = get_shap_explanation(advisor_model, df, feature_cols)
+                    shap_vals, is_shap = get_shap_explanation(advisor_model, df, feature_cols)
                     if shap_vals:
                         shap_df = pd.DataFrame({
                             t("Factor"):      list(shap_vals.keys()),
                             t("Influence"):   list(shap_vals.values()),
                         })
-                        shap_df[t("Direction")] = shap_df[t("Influence")].apply(
-                            lambda v: f"🟢 {t('Supports BUY')}" if v > 0 else f"🔴 {t('Supports SELL')}"
-                        )
+
+                        if is_shap:
+                            # True SHAP: positive = BUY, negative = SELL
+                            shap_df[t("Direction")] = shap_df[t("Influence")].apply(
+                                lambda v: f"🟢 {t('Supports BUY')}" if v > 0 else f"🔴 {t('Supports SELL')}"
+                            )
+                            color_map = {
+                                f"🟢 {t('Supports BUY')}":  "#00c48c",
+                                f"🔴 {t('Supports SELL')}": "#e84545",
+                            }
+                            chart_title = t("What is driving the AI's recommendation?")
+                        else:
+                            # Gini importance: all positive, shows magnitude only
+                            shap_df[t("Direction")] = f"📊 {t('Importance')}"
+                            color_map = {f"📊 {t('Importance')}": "#6c5ce7"}
+                            chart_title = t("Which factors matter most to the AI?")
+                            st.caption(t("Showing feature importance (magnitude only). Larger = more influential."))
+
                         fig_shap = px.bar(
                             shap_df.head(8),
                             x=t("Influence"), y=t("Factor"),
                             orientation="h",
                             color=t("Direction"),
-                            color_discrete_map={
-                                f"🟢 {t('Supports BUY')}":  "#00c48c",
-                                f"🔴 {t('Supports SELL')}": "#e84545",
-                            },
-                            title=t("What is driving the AI's recommendation?"),
+                            color_discrete_map=color_map,
+                            title=chart_title,
                         )
                         fig_shap.update_layout(
                             paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
@@ -891,7 +1121,7 @@ You can see **why**, not just **what**. This makes the advice trustworthy and ed
                     else:
                         st.info(t("Feature importance data not available for this model."))
                 except Exception as e:
-                    st.warning(t(f"SHAP chart error: {e}. Install: pip install shap"))
+                    st.warning(t(f"Feature importance chart error: {e}"))
 
                 st.divider()
 
@@ -941,10 +1171,11 @@ if user_query:
             mood = t("positive") if mean_sentiment > 0.05 else (t("negative") if mean_sentiment < -0.05 else t("neutral"))
             resp = t(f"The news mood for {symbol} is {mood} (score: {mean_sentiment:.2f}). Check the News Mood tab for day-by-day details.")
         elif any(k in q for k in ["buy","sell","invest","recommend","should i"]):
-            if metrics or run_advisor:
-                action_now = advice.get("action","HOLD") if "advice" in dir() else "HOLD"
-                prob       = advice.get("probability_up", 50) if "advice" in dir() else 50
-                resp = t(f"The AI recommends: {action_now} (confidence: {confidence:.0f}%, probability of price rise: {prob:.0f}%). See the AI Advisor tab for full explanation. ⚠️ This is NOT real financial advice!")
+            if advice.get("action"):
+                action_now = advice.get("action", "HOLD")
+                prob       = advice.get("probability_up", 50)
+                conf       = advice.get("confidence", 50)
+                resp = t(f"The AI recommends: {action_now} (confidence: {conf:.0f}%, probability of price rise: {prob:.0f}%). See the AI Advisor tab for full explanation. ⚠️ This is NOT real financial advice!")
             else:
                 resp = t("Enable 'Run AI Advisor' in the sidebar to get a buy/sell recommendation.")
         elif any(k in q for k in ["risk","safe","dangerous","loss"]):
