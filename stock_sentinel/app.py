@@ -1219,3 +1219,38 @@ if user_query:
         resp = t("Sorry, I couldn't process that. Try rephrasing your question.")
 
     st.markdown(f"**🤖 Sentinel:** {resp}")
+
+# ─────────────────────────────────────────
+# BRANDED FOOTER
+# ─────────────────────────────────────────
+st.markdown("""
+<br><br>
+<div style="
+    text-align: center;
+    padding: 28px 0 18px 0;
+    border-top: 2px solid rgba(0, 196, 140, 0.3);
+    margin-top: 40px;
+">
+    <p style="
+        font-size: 0.95rem;
+        letter-spacing: 0.5px;
+        margin: 0;
+        opacity: 0.85;
+    ">
+        Made with ❤️ by
+        <a href="https://github.com/Awais-Analyst"
+           target="_blank"
+           style="
+               color: #00c48c;
+               text-decoration: none;
+               font-weight: 600;
+           ">Awais-Analyst</a>
+    </p>
+    <p style="
+        font-size: 0.72rem;
+        margin: 6px 0 0 0;
+        opacity: 0.5;
+        letter-spacing: 0.3px;
+    ">📈 Stock Sentinel · AI-Powered Stock Analysis · For Educational Use Only</p>
+</div>
+""", unsafe_allow_html=True)
