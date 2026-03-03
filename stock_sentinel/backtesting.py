@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 def generate_signals(df: pd.DataFrame,
                      pred_col: str = "lstm_pred",
                      sentiment_col: str = "sentiment",
-                     pred_threshold: float = 0.005,
+                     pred_threshold: float = 0.002,
                      sentiment_threshold: float = 0.05) -> pd.Series:
     """
     Generate BUY (+1) / SELL (-1) / HOLD (0) signals.
@@ -36,6 +36,11 @@ def generate_signals(df: pd.DataFrame,
     Returns a Series aligned with df.index.
     """
     signals = pd.Series(0, index=df.index, name="signal", dtype=int)
+
+    # Ensure log_return exists — compute it if missing
+    if "log_return" not in df.columns:
+        df = df.copy()
+        df["log_return"] = np.log(df["Close"] / df["Close"].shift(1))
 
     # Determine the predicted return series
     if pred_col in df.columns and pred_col != "log_return":
