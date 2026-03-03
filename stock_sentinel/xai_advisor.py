@@ -52,12 +52,17 @@ FEATURE_LABELS = {
 
 
 def _prepare_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Prepare feature matrix; add volume_change if Volume is present."""
+    """Prepare feature matrix; add volume_change if Volume is present.
+    Computes log_return if missing; replaces inf with NaN."""
     df = df.copy()
+    # Compute log_return if not already present
+    if "log_return" not in df.columns and "Close" in df.columns:
+        df["log_return"] = np.log(df["Close"] / df["Close"].shift(1))
     if "Volume" in df.columns:
         df["volume_change"] = df["Volume"].pct_change()
     available = [c for c in ADVISOR_FEATURES if c in df.columns]
-    return df[available].dropna()
+    feat_df = df[available].replace([np.inf, -np.inf], np.nan).dropna()
+    return feat_df
 
 
 def _make_labels(df: pd.DataFrame, forward_days: int = 5) -> pd.Series:
@@ -114,14 +119,16 @@ def train_advisor_model(df: pd.DataFrame):
         return None, [], 0
 
 
-def get_shap_explanation(model, df: pd.DataFrame, feature_cols: list) -> dict:
+def get_shap_explanation(model, df: pd.DataFrame, feature_cols: list) -> tuple[dict, bool]:
     """
     Compute SHAP values for the most recent data point.
 
-    Returns {feature_name: shap_value} sorted by absolute importance.
-    Positive = pushed toward BUY, Negative = pushed toward SELL/HOLD.
+    Returns (dict, is_shap):
+      - dict: {feature_name: value} sorted by absolute importance
+      - is_shap: True if SHAP directional values, False if Gini fallback
 
-    Falls back to model.feature_importances_ if SHAP fails.
+    When is_shap=True: Positive = BUY, Negative = SELL.
+    When is_shap=False: All positive (magnitude only, no direction).
     """
     # ── Try SHAP first ────────────────────────────────────────────────────
     try:
@@ -129,7 +136,7 @@ def get_shap_explanation(model, df: pd.DataFrame, feature_cols: list) -> dict:
 
         feat_df  = _prepare_features(df)[feature_cols].dropna()
         if feat_df.empty:
-            return _fallback_importance(model, feature_cols)
+            return _fallback_importance(model, feature_cols), False
 
         explainer = shap.TreeExplainer(model)
         latest     = feat_df.tail(1)
@@ -156,7 +163,7 @@ def get_shap_explanation(model, df: pd.DataFrame, feature_cols: list) -> dict:
             for col, v in zip(feature_cols, sv)
         }
         result = dict(sorted(result.items(), key=lambda x: abs(x[1]), reverse=True))
-        return result
+        return result, True
 
     except ImportError:
         log.warning("SHAP not installed — using feature_importances_ fallback")
@@ -164,7 +171,7 @@ def get_shap_explanation(model, df: pd.DataFrame, feature_cols: list) -> dict:
         log.warning(f"SHAP failed ({e}) — using feature_importances_ fallback")
 
     # ── Fallback: use built-in feature importances ────────────────────────
-    return _fallback_importance(model, feature_cols)
+    return _fallback_importance(model, feature_cols), False
 
 
 def _fallback_importance(model, feature_cols: list) -> dict:
