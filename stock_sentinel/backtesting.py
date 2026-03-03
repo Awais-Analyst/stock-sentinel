@@ -28,20 +28,27 @@ def generate_signals(df: pd.DataFrame,
     Generate BUY (+1) / SELL (-1) / HOLD (0) signals.
 
     Rules (all based on prior-day data — no look-ahead):
-      BUY  : predicted return > pred_threshold AND sentiment > sentiment_threshold
-      SELL : predicted return < -pred_threshold OR sentiment < -sentiment_threshold
+      BUY  : predicted return > pred_threshold
+      SELL : predicted return < -pred_threshold
+      If sentiment data exists for that day, it must agree.
       HOLD : otherwise
 
     Returns a Series aligned with df.index.
     """
     signals = pd.Series(0, index=df.index, name="signal", dtype=int)
 
-    if pred_col in df.columns:
-        pred_return = (df[pred_col] - df["Close"].shift(1)) / df["Close"].shift(1)
+    # Determine the predicted return series
+    if pred_col in df.columns and pred_col != "log_return":
+        # pred_col is a PRICE prediction (e.g. lstm_pred) — convert to return
+        prev_close = df["Close"].shift(1)
+        pred_return = (df[pred_col] - prev_close) / prev_close
+    elif "log_return" in df.columns:
+        # Use log_return directly — it's ALREADY a return, not a price
+        # Shift by 1 to use yesterday's return as today's signal (no look-ahead)
+        pred_return = df["log_return"].shift(1)
     else:
-        # Fallback: use naive momentum (log return > 0 → bullish)
-        pred_return = df.get("log_return", pd.Series(0.0, index=df.index))
-        log.warning(f"'{pred_col}' not found — using log_return as proxy for signals")
+        pred_return = pd.Series(0.0, index=df.index)
+        log.warning("No prediction column or log_return found — all signals will be HOLD")
 
     sentiment = df[sentiment_col] if sentiment_col in df.columns else pd.Series(0.0, index=df.index)
 
@@ -55,8 +62,9 @@ def generate_signals(df: pd.DataFrame,
     signals[buy_mask]  =  1
     signals[sell_mask] = -1
 
-    n_buy = buy_mask.sum(); n_sell = sell_mask.sum()
-    log.info(f"Signals: {n_buy} BUY, {n_sell} SELL, {len(signals)-n_buy-n_sell} HOLD")
+    n_buy = int(buy_mask.sum()); n_sell = int(sell_mask.sum())
+    log.info(f"Signals: {n_buy} BUY, {n_sell} SELL, {len(signals)-n_buy-n_sell} HOLD "
+             f"(pred_col='{pred_col}', threshold={pred_threshold})")
     return signals
 
 
