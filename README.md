@@ -35,9 +35,13 @@
 
 ### Dark Mode
 *Premium glassmorphism UI with gradient sidebar, interactive Plotly charts, and AI-powered insights.*
+<img width="1912" height="898" alt="image" src="https://github.com/user-attachments/assets/9a0efdb3-ffae-4ac8-a6b8-c4cb6d9f7cf6" />
+
 
 ### Light Mode
 *Fully adaptive design — readable on both dark and light backgrounds.*
+<img width="1920" height="877" alt="image" src="https://github.com/user-attachments/assets/8909f46c-30cf-4e34-8478-64fa1d36a2d5" />
+
 
 ---
 
@@ -247,3 +251,4 @@ Built with: [yfinance](https://github.com/ranaroussi/yfinance) · [Prophet](http
 <p align="center">
   Made with ❤️ by <a href="https://github.com/Awais-Analyst">Awais-Analyst</a>
 </p>
+
