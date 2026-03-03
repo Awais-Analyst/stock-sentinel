@@ -120,32 +120,29 @@ def get_shap_explanation(model, df: pd.DataFrame, feature_cols: list) -> dict:
 
     Returns {feature_name: shap_value} sorted by absolute importance.
     Positive = pushed toward BUY, Negative = pushed toward SELL/HOLD.
+
+    Falls back to model.feature_importances_ if SHAP fails.
     """
+    # ── Try SHAP first ────────────────────────────────────────────────────
     try:
         import shap
 
         feat_df  = _prepare_features(df)[feature_cols].dropna()
         if feat_df.empty:
-            return {}
+            return _fallback_importance(model, feature_cols)
 
         explainer = shap.TreeExplainer(model)
         latest     = feat_df.tail(1)
 
         shap_values = explainer.shap_values(latest)
 
-        # Handle all possible SHAP output shapes:
-        # 1) List of arrays (older shap): [class0_array, class1_array]
-        # 2) 3D numpy array (newer shap): shape (n_classes, n_samples, n_features)
-        # 3) 2D numpy array: shape (n_samples, n_features)
+        # Handle all possible SHAP output shapes
         if isinstance(shap_values, list):
-            # List format: pick class 1 (BUY direction), first sample
             sv = np.array(shap_values[1]).flatten()[:len(feature_cols)]
         elif isinstance(shap_values, np.ndarray):
             if shap_values.ndim == 3:
-                # 3D array: [n_classes, n_samples, n_features] → class 1, sample 0
                 sv = shap_values[1, 0, :]
             elif shap_values.ndim == 2:
-                # 2D array: [n_samples, n_features] → sample 0
                 sv = shap_values[0, :]
             elif shap_values.ndim == 1:
                 sv = shap_values
@@ -158,15 +155,34 @@ def get_shap_explanation(model, df: pd.DataFrame, feature_cols: list) -> dict:
             FEATURE_LABELS.get(col, col): float(v)
             for col, v in zip(feature_cols, sv)
         }
-        # Sort by absolute importance
         result = dict(sorted(result.items(), key=lambda x: abs(x[1]), reverse=True))
         return result
 
     except ImportError:
-        log.warning("SHAP not installed — pip install shap")
-        return {}
+        log.warning("SHAP not installed — using feature_importances_ fallback")
     except Exception as e:
-        log.error(f"SHAP explanation failed: {e}")
+        log.warning(f"SHAP failed ({e}) — using feature_importances_ fallback")
+
+    # ── Fallback: use built-in feature importances ────────────────────────
+    return _fallback_importance(model, feature_cols)
+
+
+def _fallback_importance(model, feature_cols: list) -> dict:
+    """
+    Fallback when SHAP is unavailable or fails.
+    Uses RandomForest's built-in feature_importances_ (Gini importance).
+    """
+    try:
+        importances = model.feature_importances_
+        result = {
+            FEATURE_LABELS.get(col, col): float(imp)
+            for col, imp in zip(feature_cols, importances)
+        }
+        result = dict(sorted(result.items(), key=lambda x: abs(x[1]), reverse=True))
+        log.info(f"Using feature_importances_ fallback: {len(result)} features")
+        return result
+    except Exception as e:
+        log.error(f"Feature importance fallback also failed: {e}")
         return {}
 
 
