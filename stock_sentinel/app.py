@@ -85,15 +85,39 @@ html, body, [class*="css"] {
 [data-testid="stSidebar"] {
     background: linear-gradient(180deg, #0f2027 0%, #1a3a4a 60%, #203a43 100%) !important;
 }
-[data-testid="stSidebar"] * {
+/* Sidebar labels, headings, and text — white on dark gradient */
+[data-testid="stSidebar"] label,
+[data-testid="stSidebar"] .stMarkdown,
+[data-testid="stSidebar"] [data-testid="stCaption"],
+[data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2,
+[data-testid="stSidebar"] h3, [data-testid="stSidebar"] h4,
+[data-testid="stSidebar"] p, [data-testid="stSidebar"] span,
+[data-testid="stSidebar"] small {
     color: #e0e8ef !important;
 }
-[data-testid="stSidebar"] .stTextInput input,
-[data-testid="stSidebar"] .stSelectbox select {
-    background: rgba(255,255,255,0.08) !important;
-    border: 1px solid rgba(255,255,255,0.15) !important;
+/* All input fields in sidebar — dark bg + bright text so always readable */
+[data-testid="stSidebar"] input,
+[data-testid="stSidebar"] select,
+[data-testid="stSidebar"] textarea,
+[data-testid="stSidebar"] [data-baseweb="select"] *,
+[data-testid="stSidebar"] [data-baseweb="input"] * {
+    background-color: rgba(15, 32, 39, 0.7) !important;
+    color: #ffffff !important;
+    border-color: rgba(255,255,255,0.2) !important;
     border-radius: 8px !important;
-    color: #fff !important;
+}
+[data-testid="stSidebar"] input::placeholder {
+    color: rgba(255,255,255,0.45) !important;
+}
+/* Date input overrides */
+[data-testid="stSidebar"] [data-testid="stDateInput"] input {
+    background-color: rgba(15, 32, 39, 0.7) !important;
+    color: #ffffff !important;
+}
+/* Toggle / checkbox labels */
+[data-testid="stSidebar"] .stCheckbox label span,
+[data-testid="stSidebar"] [data-testid="stWidgetLabel"] {
+    color: #e0e8ef !important;
 }
 [data-testid="stSidebar"] .stButton > button {
     background: linear-gradient(135deg, #00c48c, #00d89a) !important;
@@ -446,6 +470,8 @@ if df is None or df.empty:
 
 try:
     from modeling import add_technical_indicators, add_lag_features, naive_baseline, detect_anomalies
+    # Keep raw data for price charts — these should show the FULL date range
+    df_raw = df.copy()
     df = add_technical_indicators(df)
     df = add_lag_features(df)
     df = detect_anomalies(df)
@@ -487,7 +513,8 @@ except Exception:
 # ─────────────────────────────────────────
 # QUICK SUMMARY CARD
 # ─────────────────────────────────────────
-price_change_pct = ((df["Close"].iloc[-1] - df["Close"].iloc[0]) / df["Close"].iloc[0]) * 100
+# Use df_raw for price stats — it covers the FULL user-selected date range
+price_change_pct = ((df_raw["Close"].iloc[-1] - df_raw["Close"].iloc[0]) / df_raw["Close"].iloc[0]) * 100
 trend_label = ("📈 " + t("Up")) if price_change_pct >= 0 else ("📉 " + t("Down"))
 mean_sentiment = float(df["sentiment"].mean()) if "sentiment" in df.columns else 0.0
 if   mean_sentiment >  0.05: mood_label = "🟢 " + t("Positive")
@@ -497,7 +524,7 @@ else:                         mood_label = "⚪ " + t("Neutral")
 st.markdown(f"### {t('Quick Summary')}")
 s1, s2, s3, s4 = st.columns(4)
 s1.metric(t("Price Trend"),    trend_label, f"{price_change_pct:+.1f}%")
-s2.metric(t("Latest Price"),   f"${df['Close'].iloc[-1]:.2f}")
+s2.metric(t("Latest Price"),   f"${df_raw['Close'].iloc[-1]:.2f}")
 s3.metric(t("News Mood"),      mood_label)
 s4.metric(t("Unusual Days"),   f"{int(df['anomaly'].sum())}" if "anomaly" in df.columns else "N/A")
 
@@ -539,7 +566,9 @@ with tab1:
         """))
 
     try:
-        fig_candle = plot_candlestick(df, symbol)
+        # Use df_raw for the candlestick chart — full user-selected date range
+        fig_candle = plot_candlestick(df_raw, symbol)
+        # Anomaly markers come from df (needs indicators for detection)
         if "anomaly" in df.columns:
             anomaly_df = df[df["anomaly"]]
             if not anomaly_df.empty:
@@ -557,9 +586,9 @@ with tab1:
 
     c1, c2, c3, c4 = st.columns(4)
     try:
-        c1.metric(t("Latest Price"),    f"${df['Close'].iloc[-1]:.2f}",  help=t("Last closing price"))
-        c2.metric(t("Highest Price"),   f"${df['Close'].max():.2f}",     help=t("Highest close in period"))
-        c3.metric(t("Lowest Price"),    f"${df['Close'].min():.2f}",     help=t("Lowest close in period"))
+        c1.metric(t("Latest Price"),    f"${df_raw['Close'].iloc[-1]:.2f}",  help=t("Last closing price"))
+        c2.metric(t("Highest Price"),   f"${df_raw['Close'].max():.2f}",     help=t("Highest close in period"))
+        c3.metric(t("Lowest Price"),    f"${df_raw['Close'].min():.2f}",     help=t("Lowest close in period"))
         c4.metric(t("Unusual Days"),    f"{int(df['anomaly'].sum())}" if "anomaly" in df.columns else "N/A",
                   help=t("AI-detected days with surprising price moves"))
     except Exception as e:
@@ -602,7 +631,7 @@ with tab1:
             st.warning(t(f"Forecast failed: {e}"))
 
     try:
-        baseline = naive_baseline(df)
+        baseline = naive_baseline(df_raw)
     except Exception:
         baseline = None
 
@@ -621,7 +650,7 @@ with tab1:
                 st.warning(t(f"Deep learning model failed: {e}"))
 
     try:
-        fig_fc = plot_forecast(df, forecast, symbol=symbol, baseline=baseline)
+        fig_fc = plot_forecast(df_raw, forecast, symbol=symbol, baseline=baseline)
         if lstm_preds is not None:
             import plotly.graph_objects as go
             fig_fc.add_trace(go.Scatter(
@@ -1165,7 +1194,7 @@ if user_query:
     q = user_query.lower()
     try:
         if any(k in q for k in ["predict","forecast","future","price","up","down"]):
-            direction = t("upward") if forecast is not None and not forecast.empty and forecast["yhat"].iloc[-1] > df["Close"].iloc[-1] else t("downward")
+            direction = t("upward") if forecast is not None and not forecast.empty and forecast["yhat"].iloc[-1] > df_raw["Close"].iloc[-1] else t("downward")
             resp = t(f"The AI forecast shows a {direction} trend over the next {horizon} days. See the orange dashed line in the Price Chart tab. Remember: predictions are never 100% accurate!")
         elif any(k in q for k in ["news","mood","sentiment","feel"]):
             mood = t("positive") if mean_sentiment > 0.05 else (t("negative") if mean_sentiment < -0.05 else t("neutral"))
