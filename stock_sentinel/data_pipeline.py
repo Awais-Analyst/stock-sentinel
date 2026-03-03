@@ -106,36 +106,101 @@ def get_stock_data(symbol: str, start: str, end: str,
 
 
 import yfinance as yf
+import re
+
+# ── Dynamic company name lookup (cached) ─────────────────────────────────
+_company_name_cache: dict = {}
+
+def _get_company_name(symbol: str) -> str:
+    """
+    Fetch the real company name from Yahoo Finance.
+    Cached so it's only called once per symbol per session.
+    Returns cleaned name like 'Apple' instead of 'Apple Inc.'
+    """
+    key = symbol.upper()
+    if key in _company_name_cache:
+        return _company_name_cache[key]
+
+    name = ""
+    try:
+        ticker = yf.Ticker(symbol)
+        info = ticker.info or {}
+        raw = info.get("shortName") or info.get("longName") or ""
+        # Clean corporate suffixes for broader matching
+        for suffix in [" Inc.", " Inc", " Corp.", " Corp", " Ltd.", " Ltd",
+                       " PLC", " plc", " Limited", " Co.", " S.A.", " AG",
+                       " NV", " SE", " & Co", ",", "."]:
+            raw = raw.replace(suffix, "")
+        name = raw.strip()
+    except Exception as e:
+        log.warning(f"yfinance name lookup failed for {symbol}: {e}")
+
+    if not name:
+        name = symbol.split(".")[0]  # fallback: use ticker itself
+    _company_name_cache[key] = name
+    log.info(f"Company name for {symbol}: '{name}'")
+    return name
+
 
 def _build_search_query(symbol: str) -> str:
     """
-    Build a news search query dynamically using the actual company name
-    from Yahoo Finance. Avoids pulling irrelevant news matching just the ticker (like "NBP").
+    Build a news search query using the real company name.
     """
-    try:
-        # Fetch actual company info from yfinance
-        ticker = yf.Ticker(symbol)
-        info = ticker.info
-        name = info.get('shortName') or info.get('longName')
-        
-        if name:
-            # Clean up suffixes like " Inc.", " Corp.", " Ltd.", " PLC" for broader matching
-            clean_name = name.replace(" Inc.", "").replace(" Corp.", "").replace(" Ltd.", "").replace(" PLC", "").strip()
-            # If it's a Pakistani stock, add Pakistan-specific keywords
-            if ".KA" in symbol.upper():
-                return f'"{clean_name}" OR ("{clean_name}" AND (pakistan OR karachi OR profit OR bank))'
-            # Standard company search
-            return f'"{clean_name}" AND (stock OR shares OR earnings)'
-            
-    except Exception as e:
-        log.warning(f"Could not fetch company name for {symbol} recursively: {e}")
+    name = _get_company_name(symbol)
+    return f'"{name}" AND (stock OR shares OR market OR earnings OR profit)'
 
-    # Fallback to the ticker symbol stripping the exchange suffix
-    base = symbol.split(".")[0]
-    if ".KA" in symbol.upper():
-        return f'"{base}" AND (pakistan OR karachi OR kse OR stock OR shares)'
-    
-    return f'"{base}" AND (stock OR shares OR earnings)'
+
+# ── Post-fetch relevance filter ──────────────────────────────────────────
+_FINANCIAL_KEYWORDS = {
+    "stock", "shares", "market", "earnings", "revenue", "profit", "loss",
+    "quarter", "dividend", "investor", "trading", "analyst", "forecast",
+    "ipo", "valuation", "ceo", "chairman", "board", "merger", "acquisition",
+    "buy", "sell", "bullish", "bearish", "portfolio", "index", "exchange",
+    "nasdaq", "nyse", "s&p", "dow", "sensex", "nifty", "kse", "psx",
+    "karachi", "wall street", "sec", "financial", "bank", "fund",
+}
+
+def _is_relevant_article(text: str, company_name: str, symbol: str) -> bool:
+    """
+    Check if fetched article text is actually about the company.
+    Returns True only if the article mentions:
+      - The company name (e.g. 'Apple', 'National Bank of Pakistan'), OR
+      - The ticker symbol (e.g. 'AAPL', 'NBP')
+    AND contains at least one financial keyword.
+    """
+    text_lower = text.lower()
+    company_lower = company_name.lower()
+    ticker_base = symbol.split(".")[0].lower()
+
+    # Check 1: Does the article mention the company or ticker?
+    mentions_company = (
+        company_lower in text_lower or
+        ticker_base in text_lower.split()  # exact word match for short tickers
+    )
+    if not mentions_company:
+        return False
+
+    # Check 2: Does it contain at least one financial keyword?
+    has_financial = any(kw in text_lower for kw in _FINANCIAL_KEYWORDS)
+    return has_financial
+
+
+def _filter_relevant_articles(articles: list[dict], symbol: str) -> list[dict]:
+    """
+    Remove articles that aren't actually about the target company.
+    """
+    company_name = _get_company_name(symbol)
+    filtered = [
+        a for a in articles
+        if _is_relevant_article(a.get("text", ""), company_name, symbol)
+    ]
+    removed = len(articles) - len(filtered)
+    if removed > 0:
+        log.info(f"Relevance filter: kept {len(filtered)}/{len(articles)} articles "
+                 f"for {symbol} ('{company_name}'). Removed {removed} irrelevant.")
+    return filtered
+
+
 
 # ─────────────────────────────────────────────
 # NEWS DATA
@@ -256,6 +321,10 @@ def get_news(symbol: str,
 
     if not all_articles:
         log.warning(f"All news sources returned 0 articles for '{symbol}'.")
+        return all_articles
+
+    # ── Filter out irrelevant articles ────────────────────────────────────
+    all_articles = _filter_relevant_articles(all_articles, symbol)
     return all_articles
 
 
