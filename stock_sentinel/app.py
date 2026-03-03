@@ -889,7 +889,7 @@ You can see **why**, not just **what**. This makes the advice trustworthy and ed
                         )
                         st.plotly_chart(fig_shap, use_container_width=True)
                     else:
-                        st.info(t("SHAP explanation not available — install 'shap' package."))
+                        st.info(t("Feature importance data not available for this model."))
                 except Exception as e:
                     st.warning(t(f"SHAP chart error: {e}. Install: pip install shap"))
 
